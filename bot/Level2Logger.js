@@ -12,6 +12,7 @@ class Level2Logger {
         this.logger = options.logger || console;
         this.distance = Number.isFinite(options.distance) && options.distance > 0 ? Number(options.distance) : 20;
         this.depth = Number.isInteger(options.depth) && options.depth > 0 ? options.depth : 100;
+        this.intervalMs = Number.isFinite(options.intervalMs) && options.intervalMs > 0 ? options.intervalMs : 20000;
         this.dbPath = options.dbPath || path.join(__dirname, 'level2.db');
 
         this.monitorOwned = !options.monitor;
@@ -23,35 +24,41 @@ class Level2Logger {
 
         this.db = null;
         this.insertStmt = null;
+        this.selectPairStmt = null;
+        this.insertPairStmt = null;
+        this.pairIdCache = new Map();
         this.initialised = false;
     }
 
-    init() {
-        return this._initialiseDatabase()
-            .then(() => {
-                this.initialised = true;
-                this.pairs.forEach((symbol) => {
-                    this.bookStates.set(symbol, {
-                        bids: new Map(),
-                        asks: new Map(),
-                        price: null
-                    });
-                    const bookSub = this.monitor.onOrderBook(symbol, (event) => this._onBookEvent(symbol, event), {
-                        depth: this.depth,
-                        snapshot: true
-                    });
-                    const priceSub = this.monitor.onPriceChange(symbol, (candle) => this._onPriceEvent(symbol, candle), {
-                        interval: 1,
-                        snapshot: false
-                    });
-                    this.subscriptions.push(bookSub);
-                    this.priceSubscriptions.push(priceSub);
+    async init() {
+        try {
+            await this._initialiseDatabase();
+            this.initialised = true;
+            for (const symbol of this.pairs) {
+                const pairId = await this._ensurePairId(symbol);
+                this.bookStates.set(symbol, {
+                    bids: new Map(),
+                    asks: new Map(),
+                    price: null,
+                    pairId,
+                    lastFlush: null,
+                    pendingPromise: null
                 });
-            })
-            .catch((error) => {
-                this.logger.error?.(`Failed to initialise Level2Logger: ${error.message}`);
-                throw error;
-            });
+                const bookSub = this.monitor.onOrderBook(symbol, (event) => this._onBookEvent(symbol, event), {
+                    depth: this.depth,
+                    snapshot: true
+                });
+                const priceSub = this.monitor.onPriceChange(symbol, (candle) => this._onPriceEvent(symbol, candle), {
+                    interval: 1,
+                    snapshot: false
+                });
+                this.subscriptions.push(bookSub);
+                this.priceSubscriptions.push(priceSub);
+            }
+        } catch (error) {
+            this.logger.error?.(`Failed to initialise Level2Logger: ${error.message}`);
+            throw error;
+        }
     }
 
     async shutdown() {
@@ -59,7 +66,17 @@ class Level2Logger {
         this.subscriptions = [];
         this.priceSubscriptions.forEach((sub) => sub?.unsubscribe?.());
         this.priceSubscriptions = [];
+
+        const flushes = [];
+        this.bookStates.forEach((state, symbol) => {
+            const promise = this._writeSnapshot(symbol, state, Date.now(), true);
+            if (promise) {
+                flushes.push(promise);
+            }
+        });
+        await Promise.all(flushes);
         this.bookStates.clear();
+
         if (this.monitorOwned) {
             await this.monitor.close();
         }
@@ -84,39 +101,41 @@ class Level2Logger {
                 this.db.run('PRAGMA temp_store = MEMORY;');
                 this.db.run('PRAGMA mmap_size = 134217728;');
                 this.db.run(`
-                    CREATE TABLE IF NOT EXISTS level2_logs (
-                        pair TEXT NOT NULL,
-                        timestamp INTEGER NOT NULL,
-                        price REAL,
-                        buy_qty REAL NOT NULL,
-                        sell_qty REAL NOT NULL
+                    CREATE TABLE IF NOT EXISTS pairs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT UNIQUE NOT NULL
                     )
                 `);
                 this.db.run(`
-                    CREATE INDEX IF NOT EXISTS idx_level2_logs_pair_ts
-                    ON level2_logs (pair, timestamp)
+                    CREATE TABLE IF NOT EXISTS level2_logs (
+                        pair_id INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        price REAL,
+                        buy_qty REAL NOT NULL,
+                        sell_qty REAL NOT NULL,
+                        FOREIGN KEY(pair_id) REFERENCES pairs(id)
+                    )
                 `, (error) => {
                     if (error) {
                         reject(error);
                         return;
                     }
-                    this._ensurePriceColumn()
-                        .then(() => {
-                            this.insertStmt = this.db.prepare(`
-                                INSERT INTO level2_logs (pair, timestamp, price, buy_qty, sell_qty)
-                                VALUES (?, ?, ?, ?, ?)
-                            `, (prepareError) => {
-                                if (prepareError) {
-                                    reject(prepareError);
-                                } else {
-                                    resolve();
-                                }
-                            });
-                        })
-                        .catch(reject);
+                    resolve();
                 });
             });
         });
+
+        await this._ensureSchema();
+        await this._runSql('CREATE INDEX IF NOT EXISTS idx_level2_logs_pair_ts ON level2_logs (pair_id, timestamp)');
+
+        const [insertStmt, selectPairStmt, insertPairStmt] = await Promise.all([
+            this._prepareStatement('INSERT INTO level2_logs (pair_id, timestamp, price, buy_qty, sell_qty) VALUES (?, ?, ?, ?, ?)'),
+            this._prepareStatement('SELECT id FROM pairs WHERE symbol = ?'),
+            this._prepareStatement('INSERT OR IGNORE INTO pairs (symbol) VALUES (?)')
+        ]);
+        this.insertStmt = insertStmt;
+        this.selectPairStmt = selectPairStmt;
+        this.insertPairStmt = insertPairStmt;
     }
 
     async _closeDatabase() {
@@ -125,18 +144,28 @@ class Level2Logger {
         }
 
         await new Promise((resolve, reject) => {
-            const finalize = (callback) => {
+            const finalizeStatements = (callback) => {
+                const tasks = [];
                 if (this.insertStmt) {
-                    this.insertStmt.finalize((err) => {
-                        this.insertStmt = null;
-                        callback(err);
-                    });
-                } else {
-                    callback();
+                    tasks.push(new Promise((res, rej) => this.insertStmt.finalize((err) => err ? rej(err) : res())));
+                    this.insertStmt = null;
                 }
+                if (this.selectPairStmt) {
+                    tasks.push(new Promise((res, rej) => this.selectPairStmt.finalize((err) => err ? rej(err) : res())));
+                    this.selectPairStmt = null;
+                }
+                if (this.insertPairStmt) {
+                    tasks.push(new Promise((res, rej) => this.insertPairStmt.finalize((err) => err ? rej(err) : res())));
+                    this.insertPairStmt = null;
+                }
+                if (tasks.length === 0) {
+                    callback();
+                    return;
+                }
+                Promise.all(tasks).then(() => callback()).catch((error) => callback(error));
             };
 
-            finalize((finalizeError) => {
+            finalizeStatements((finalizeError) => {
                 if (finalizeError) {
                     reject(finalizeError);
                     return;
@@ -154,6 +183,7 @@ class Level2Logger {
         });
 
         this.db = null;
+        this.pairIdCache.clear();
         this.initialised = false;
     }
 
@@ -213,31 +243,23 @@ class Level2Logger {
     }
 
     _recordSnapshot(symbol, state, timestamp) {
-        const referencePrice = this._computeReferencePrice(state);
-        if (!Number.isFinite(referencePrice) || referencePrice <= 0) {
-            return;
+        if (state.lastFlush === null) {
+            state.lastFlush = timestamp;
         }
 
-        const threshold = referencePrice * (this.distance / 100);
-        const buyQty = this._sumWithinDistance(state.bids, referencePrice, threshold, 'buy');
-        const sellQty = this._sumWithinDistance(state.asks, referencePrice, threshold, 'sell');
-
-        const priceValue = Number.isFinite(state.price) ? state.price : referencePrice;
-
-        if (!this.initialised || !this.insertStmt) {
-            return;
-        }
-
-        this.insertStmt.run(symbol, timestamp, priceValue, buyQty, sellQty, (error) => {
-            if (error) {
-                this.logger.error?.(`Failed to persist level2 snapshot: ${error.message}`);
+        if ((timestamp - state.lastFlush) >= this.intervalMs && !state.pendingPromise) {
+            const flushPromise = this._writeSnapshot(symbol, state, timestamp);
+            if (flushPromise) {
+                state.pendingPromise = flushPromise;
+                flushPromise
+                    .catch((error) => {
+                        this.logger.error?.(`Failed to persist level2 snapshot: ${error.message}`);
+                    })
+                    .finally(() => {
+                        state.pendingPromise = null;
+                    });
             }
-        });
-
-        const priceLog = Number.isFinite(priceValue) ? priceValue.toFixed(8) : 'n/a';
-        const buyLog = Number.isFinite(buyQty) ? buyQty.toFixed(6) : '0';
-        const sellLog = Number.isFinite(sellQty) ? sellQty.toFixed(6) : '0';
-        this.logger.debug?.(`[Level2] ${symbol} ${timestamp} price=${priceLog} buy=${buyLog} sell=${sellLog}`);
+        }
     }
 
     _computeReferencePrice(state) {
@@ -282,7 +304,7 @@ class Level2Logger {
         return best;
     }
 
-    _sumWithinDistance(levels, referencePrice, threshold, side) {
+    _totalWithinDistance(levels, referencePrice, threshold, side) {
         let total = 0;
         levels.forEach((level) => {
             if (!Number.isFinite(level.price) || !Number.isFinite(level.qty)) {
@@ -299,25 +321,219 @@ class Level2Logger {
         return total;
     }
 
-    _ensurePriceColumn() {
+    _writeSnapshot(symbol, state, timestamp, force = false) {
+        if (!this.initialised || !this.insertStmt) {
+            return null;
+        }
+
+        const pairId = state.pairId;
+        if (!pairId) {
+            return null;
+        }
+
+        const referencePrice = this._computeReferencePrice(state);
+        const priceValue = Number.isFinite(state.price) ? state.price : referencePrice;
+        if (!Number.isFinite(referencePrice) || referencePrice <= 0 || !Number.isFinite(priceValue)) {
+            return null;
+        }
+
+        const threshold = referencePrice * (this.distance / 100);
+        let buyQty = this._totalWithinDistance(state.bids, referencePrice, threshold, 'buy');
+        let sellQty = this._totalWithinDistance(state.asks, referencePrice, threshold, 'sell');
+
+        if (!force && buyQty === 0 && sellQty === 0) {
+            state.lastFlush = timestamp;
+            return null;
+        }
+
+        buyQty = Math.round(buyQty * 1e6) / 1e6;
+        sellQty = Math.round(sellQty * 1e6) / 1e6;
+        const roundedPrice = Math.round(priceValue * 1e8) / 1e8;
+        const recordTimestamp = timestamp;
+
+        state.lastFlush = recordTimestamp;
+        return new Promise((resolve) => {
+            this.insertStmt.run(pairId, recordTimestamp, roundedPrice, buyQty, sellQty, (error) => {
+                if (error) {
+                    this.logger.error?.(`Failed to persist level2 snapshot: ${error.message}`);
+                } else {
+                    const priceLog = roundedPrice.toFixed(8);
+                    const buyLog = buyQty.toFixed(6);
+                    const sellLog = sellQty.toFixed(6);
+                    this.logger.debug?.(`[Level2] ${symbol} ${recordTimestamp} price=${priceLog} buy=${buyLog} sell=${sellLog}`);
+                }
+                resolve();
+            });
+        });
+    }
+
+    async _ensurePairId(symbol) {
+        if (this.pairIdCache.has(symbol)) {
+            return this.pairIdCache.get(symbol);
+        }
+
+        await this._runStatement(this.insertPairStmt, [symbol]);
+        const row = await this._get(this.selectPairStmt, [symbol]);
+        if (!row || !Number.isInteger(row.id)) {
+            throw new Error(`Failed to resolve pair id for ${symbol}`);
+        }
+        this.pairIdCache.set(symbol, row.id);
+        return row.id;
+    }
+
+    _ensureSchema() {
         return new Promise((resolve, reject) => {
-            this.db.all('PRAGMA table_info(level2_logs)', (error, rows) => {
+            this.db.all('PRAGMA table_info(level2_logs)', async (error, rows) => {
                 if (error) {
                     reject(error);
                     return;
                 }
-                const hasPrice = Array.isArray(rows) && rows.some((row) => row.name === 'price');
-                if (hasPrice) {
+                if (!rows || rows.length === 0) {
                     resolve();
                     return;
                 }
-                this.db.run('ALTER TABLE level2_logs ADD COLUMN price REAL', (alterError) => {
-                    if (alterError && !alterError.message.includes('duplicate column name')) {
-                        reject(alterError);
-                    } else {
-                        resolve();
+                const hasPairId = rows.some((row) => row.name === 'pair_id');
+                const hasPairText = rows.some((row) => row.name === 'pair');
+                const hasPrice = rows.some((row) => row.name === 'price');
+
+                try {
+                    if (!hasPrice) {
+                        await this._runSql('ALTER TABLE level2_logs ADD COLUMN price REAL');
                     }
+                    if (!hasPairId) {
+                        await this._migratePairSchema(hasPairText);
+                    }
+                    resolve();
+                } catch (schemaError) {
+                    reject(schemaError);
+                }
+            });
+        });
+    }
+
+    _migratePairSchema(hasPairText) {
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                this.db.run('ALTER TABLE level2_logs RENAME TO level2_logs_old', (renameErr) => {
+                    if (renameErr) {
+                        reject(renameErr);
+                        return;
+                    }
+                    this.db.run(`
+                        CREATE TABLE level2_logs (
+                            pair_id INTEGER NOT NULL,
+                            timestamp INTEGER NOT NULL,
+                            price REAL,
+                            buy_qty REAL NOT NULL,
+                            sell_qty REAL NOT NULL,
+                            FOREIGN KEY(pair_id) REFERENCES pairs(id)
+                        )
+                    `, (createErr) => {
+                        if (createErr) {
+                            reject(createErr);
+                            return;
+                        }
+                        const finish = () => {
+                            this.db.run('DROP TABLE level2_logs_old', (dropErr) => {
+                                if (dropErr) {
+                                    reject(dropErr);
+                                } else {
+                                    resolve();
+                                }
+                            });
+                        };
+
+                        const migrateData = () => {
+                            if (hasPairText) {
+                                this.db.run(`
+                                    INSERT OR IGNORE INTO pairs (symbol)
+                                    SELECT DISTINCT pair FROM level2_logs_old
+                                `, (insertPairsErr) => {
+                                    if (insertPairsErr) {
+                                        reject(insertPairsErr);
+                                        return;
+                                    }
+                                    this.db.run(`
+                                        INSERT INTO level2_logs (pair_id, timestamp, price, buy_qty, sell_qty)
+                                        SELECT p.id, old.timestamp, old.price, old.buy_qty, old.sell_qty
+                                        FROM level2_logs_old old
+                                        JOIN pairs p ON p.symbol = old.pair
+                                    `, (copyErr) => {
+                                        if (copyErr) {
+                                            reject(copyErr);
+                                        } else {
+                                            finish();
+                                        }
+                                    });
+                                });
+                            } else {
+                                finish();
+                            }
+                        };
+
+                        migrateData();
+                    });
                 });
+            });
+        });
+    }
+
+    _runSql(sql, params = []) {
+        return new Promise((resolve, reject) => {
+            this.db.run(sql, params, (error) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+    _prepareStatement(sql) {
+        return new Promise((resolve, reject) => {
+            const statement = this.db.prepare(sql, (error) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(statement);
+                }
+            });
+        });
+    }
+
+    _runStatement(statement, params) {
+        return new Promise((resolve, reject) => {
+            statement.run(params, (error) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+    _get(statement, params) {
+        return new Promise((resolve, reject) => {
+            statement.get(params, (error, row) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    _all(statement, params) {
+        return new Promise((resolve, reject) => {
+            statement.all(params, (error, rows) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(rows);
+                }
             });
         });
     }

@@ -1,7 +1,7 @@
 const Level2Logger = require('./Level2Logger');
 
 (async () => {
-    const logger = new Level2Logger({ pair: ['DOGE/USD'], distance: 20 });
+    const logger = new Level2Logger({ pair: ['DOGE/USD'], distance: 5 });
     await logger.init();
 
     const shutdown = async () => {

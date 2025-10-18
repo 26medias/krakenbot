@@ -14,33 +14,37 @@ class Level2Inspector {
         this.lastStmt = null;
         this.recentStmt = null;
         this.pairsStmt = null;
+        this.usesPairId = false;
 
         this.ready = new Promise((resolve, reject) => {
             this.db.serialize(() => {
+                this.db.run('PRAGMA foreign_keys = ON;');
                 this.db.run(`
-                    CREATE TABLE IF NOT EXISTS level2_logs (
-                        pair TEXT NOT NULL,
-                        timestamp INTEGER NOT NULL,
-                        price REAL,
-                        buy_qty REAL NOT NULL,
-                        sell_qty REAL NOT NULL
+                    CREATE TABLE IF NOT EXISTS pairs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT UNIQUE NOT NULL
                     )
                 `);
                 this.db.run(`
-                    CREATE INDEX IF NOT EXISTS idx_level2_logs_pair_ts
-                    ON level2_logs (pair, timestamp)
-                `);
-                this._ensurePriceColumn((err) => {
-                    if (err) {
-                        reject(err);
+                    CREATE TABLE IF NOT EXISTS level2_logs (
+                        pair_id INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        price REAL,
+                        buy_qty REAL NOT NULL,
+                        sell_qty REAL NOT NULL,
+                        FOREIGN KEY(pair_id) REFERENCES pairs(id)
+                    )
+                `, (error) => {
+                    if (error) {
+                        reject(error);
                         return;
                     }
-                    try {
-                        this._prepareStatements();
-                        resolve();
-                    } catch (prepareError) {
-                        reject(prepareError);
-                    }
+                    this._inspectSchema()
+                        .then(() => {
+                            this._prepareStatements();
+                            resolve();
+                        })
+                        .catch(reject);
                 });
             });
         });
@@ -100,31 +104,79 @@ class Level2Inspector {
     }
 
     _prepareStatements() {
-        this.countStmt = this.db.prepare('SELECT COUNT(*) AS total FROM level2_logs WHERE pair = ?');
-        this.firstStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp ASC LIMIT 1');
-        this.lastStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp DESC LIMIT 1');
-        this.recentStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp DESC LIMIT ?');
-        this.pairsStmt = this.db.prepare('SELECT pair, COUNT(*) AS total FROM level2_logs GROUP BY pair ORDER BY total DESC');
+        if (this.usesPairId) {
+            this.countStmt = this.db.prepare(`
+                SELECT COUNT(*) AS total
+                FROM level2_logs l
+                JOIN pairs p ON p.id = l.pair_id
+                WHERE p.symbol = ?
+            `);
+            this.firstStmt = this.db.prepare(`
+                SELECT l.timestamp, l.price, l.buy_qty, l.sell_qty
+                FROM level2_logs l
+                JOIN pairs p ON p.id = l.pair_id
+                WHERE p.symbol = ?
+                ORDER BY l.timestamp ASC
+                LIMIT 1
+            `);
+            this.lastStmt = this.db.prepare(`
+                SELECT l.timestamp, l.price, l.buy_qty, l.sell_qty
+                FROM level2_logs l
+                JOIN pairs p ON p.id = l.pair_id
+                WHERE p.symbol = ?
+                ORDER BY l.timestamp DESC
+                LIMIT 1
+            `);
+            this.recentStmt = this.db.prepare(`
+                SELECT l.timestamp, l.price, l.buy_qty, l.sell_qty
+                FROM level2_logs l
+                JOIN pairs p ON p.id = l.pair_id
+                WHERE p.symbol = ?
+                ORDER BY l.timestamp DESC
+                LIMIT ?
+            `);
+            this.pairsStmt = this.db.prepare(`
+                SELECT p.symbol AS pair, COUNT(*) AS total
+                FROM level2_logs l
+                JOIN pairs p ON p.id = l.pair_id
+                GROUP BY p.symbol
+                ORDER BY total DESC
+            `);
+        } else {
+            this.countStmt = this.db.prepare('SELECT COUNT(*) AS total FROM level2_logs WHERE pair = ?');
+            this.firstStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp ASC LIMIT 1');
+            this.lastStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp DESC LIMIT 1');
+            this.recentStmt = this.db.prepare('SELECT timestamp, price, buy_qty, sell_qty FROM level2_logs WHERE pair = ? ORDER BY timestamp DESC LIMIT ?');
+            this.pairsStmt = this.db.prepare('SELECT pair, COUNT(*) AS total FROM level2_logs GROUP BY pair ORDER BY total DESC');
+        }
     }
 
-    _ensurePriceColumn(done) {
-        this.db.all('PRAGMA table_info(level2_logs)', (error, rows) => {
-            if (error) {
-                if (typeof done === 'function') {
-                    done(error);
+    _inspectSchema() {
+        return new Promise((resolve, reject) => {
+            this.db.all('PRAGMA table_info(level2_logs)', (error, rows) => {
+                if (error) {
+                    reject(error);
+                    return;
                 }
-                return;
-            }
-            const hasPrice = Array.isArray(rows) && rows.some((row) => row.name === 'price');
-            if (!hasPrice) {
-                this.db.run('ALTER TABLE level2_logs ADD COLUMN price REAL', (alterError) => {
-                    if (typeof done === 'function') {
-                        done(alterError);
-                    }
-                });
-            } else if (typeof done === 'function') {
-                done();
-            }
+                if (!rows || rows.length === 0) {
+                    this.usesPairId = true;
+                    resolve();
+                    return;
+                }
+                this.usesPairId = rows.some((row) => row.name === 'pair_id');
+                const hasPrice = rows.some((row) => row.name === 'price');
+                if (!hasPrice) {
+                    this.db.run('ALTER TABLE level2_logs ADD COLUMN price REAL', (alterErr) => {
+                        if (alterErr && !alterErr.message.includes('duplicate column name')) {
+                            reject(alterErr);
+                        } else {
+                            resolve();
+                        }
+                    });
+                } else {
+                    resolve();
+                }
+            });
         });
     }
 
@@ -154,6 +206,7 @@ class Level2Inspector {
 }
 
 module.exports = Level2Inspector;
+module.exports.normalisePair = normalisePair;
 
 function normalisePair(pair) {
     const trimmed = pair.trim();

@@ -109,28 +109,7 @@ class Bot {
     }
 
     async onRebalance(event) {
-        const openOrders = await this.getOpenOrders();
-        const sellOrders = openOrders.filter(order => order.descr.type === 'sell');
-        const buyOrders = openOrders.filter(order => order.descr.type === 'buy');
-        const lowestBuyOrder = buyOrders.reduce((minOrder, order) => {
-            const price = parseFloat(order.descr.price);
-            return (minOrder === null || price < parseFloat(minOrder.descr.price)) ? order : minOrder;
-        }, null);
-        const highestSellOrder = sellOrders.reduce((maxOrder, order) => {
-            const price = parseFloat(order.descr.price);
-            return (maxOrder === null || price > parseFloat(maxOrder.descr.price)) ? order : maxOrder;
-        }, null);
 
-        const latest = await this.tools.getprice();
-
-        //console.log('Latest price:', latest.c);
-        //console.log('Lowest buy price:', lowestBuyOrder);
-        //console.log('Highest sell price:', highestSellOrder);
-
-        const rangeUp = parseFloat(highestSellOrder.descr.price)-latest.c;
-        const rangeDown = latest.c-parseFloat(lowestBuyOrder.descr.price);
-
-        const limitOrders = await this.calculateLimitRanges(rangeUp, rangeDown);
         const orderCount = await this.countOpenLimitOrders();
         console.log(`Rebalance check: ${orderCount.total} open orders (Buy: ${orderCount.buy}, Sell: ${orderCount.sell})`);
 
@@ -140,6 +119,30 @@ class Bot {
             await this.createLimitOrders(limitOrders.buyOrders, limitOrders.sellOrders);
             return;
         } else {
+
+            const openOrders = await this.getOpenOrders();
+            const sellOrders = openOrders.filter(order => order.descr.type === 'sell');
+            const buyOrders = openOrders.filter(order => order.descr.type === 'buy');
+            const lowestBuyOrder = buyOrders.reduce((minOrder, order) => {
+                const price = parseFloat(order.descr.price);
+                return (minOrder === null || price < parseFloat(minOrder.descr.price)) ? order : minOrder;
+            }, null);
+            const highestSellOrder = sellOrders.reduce((maxOrder, order) => {
+                const price = parseFloat(order.descr.price);
+                return (maxOrder === null || price > parseFloat(maxOrder.descr.price)) ? order : maxOrder;
+            }, null);
+
+            const latest = await this.tools.getprice();
+
+            //console.log('Latest price:', latest.c);
+            //console.log('Lowest buy price:', lowestBuyOrder);
+            //console.log('Highest sell price:', highestSellOrder);
+
+            const rangeUp = parseFloat(highestSellOrder.descr.price)-latest.c;
+            const rangeDown = latest.c-parseFloat(lowestBuyOrder.descr.price);
+
+            const limitOrders = await this.calculateLimitRanges(rangeUp, rangeDown);
+            
             if (event.side == 'buy') {
                 // Delete all order above close
                 console.log("-- Delete all SELL order above close --")
