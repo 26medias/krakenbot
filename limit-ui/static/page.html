@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limit Order Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-webkit-slider-track {
+            background: #e5e7eb;
+            height: 6px;
+            border-radius: 3px;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            background: #4f46e5;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            margin-top: -7px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #4338ca;
+            transform: scale(1.1);
+        }
+        
+        .order-row {
+            transition: all 0.3s ease;
+        }
+        
+        .order-row:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .visualization-toggle {
+            transition: all 0.3s ease;
+        }
+        
+        .visualization-toggle.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .curve-preview {
+            height: 40px;
+            margin-top: 8px;
+        }
+        
+        .warning-badge {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .sum-row {
+            background: linear-gradient(to right, rgba(99, 102, 241, 0.05), rgba(99, 102, 241, 0.1));
+            font-weight: 600;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background-color: #e5e7eb;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: #4f46e5;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="gradient-bg text-white shadow-lg">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-chart-line text-3xl"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold">Limit Order Calculator</h1>
+                            <p class="text-purple-100 text-sm">Optimize your trading strategy</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <p class="text-xs text-purple-100">Total Orders</p>
+                            <p class="text-xl font-bold" id="totalOrders">0</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-purple-100">Total Value</p>
+                            <p class="text-xl font-bold" id="totalValue">$0</p>
+                        </div>
+                        <button id="refreshButton" onclick="refreshData()" 
+                            class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white py-2 px-4 rounded-lg font-medium transition flex items-center">
+                            <i class="fas fa-sync-alt mr-2" id="refreshIcon"></i>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- Input Panel -->
+                <div class="lg:col-span-1">
+                    <div class="glass-effect rounded-xl shadow-lg p-6 fade-in">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            <i class="fas fa-sliders-h mr-2 text-purple-600"></i>
+                            Parameters
+                        </h2>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Trading Pair
+                                </label>
+                                <div class="relative">
+                                    <select id="pairSelector" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition appearance-none bg-white">
+                                        <option value="">Loading pairs...</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <i class="fas fa-chevron-down text-gray-400"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Current Price ($)
+                                </label>
+                                <div class="relative">
+                                    <input type="number" id="currentPrice" step="0.0001" value="0.1900" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <i id="priceLoadingIcon" class="fas fa-spinner fa-spin text-gray-400 hidden"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Positive Range ($)
+                                </label>
+                                <input type="number" id="positiveRange" step="0.0001" value="0.0500" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Negative Range ($)
+                                </label>
+                                <input type="number" id="negativeRange" step="0.0001" value="0.0500" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Orders per Side
+                                </label>
+                                <input type="number" id="ordersPerSide" min="1" max="50" value="10" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    USD Balance
+                                </label>
+                                <div class="relative">
+                                    <input type="number" id="usdBalance" step="0.01" value="1000" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <span id="usdBalanceActual" class="text-xs text-gray-500"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Asset Balance
+                                </label>
+                                <div class="relative">
+                                    <input type="number" id="assetBalance" step="0.01" value="4920" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <span id="assetBalanceActual" class="text-xs text-gray-500"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Minimum Order Value ($)
+                                </label>
+                                <input type="number" id="minOrderValue" step="0.01" value="5" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-3 mt-6">
+                            <button onclick="calculateOrders()" 
+                                class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-indigo-700 transition transform hover:scale-105 shadow-lg">
+                                <i class="fas fa-calculator mr-2"></i>
+                                Calculate Orders
+                            </button>
+                            <button onclick="createOrders()" id="createOrdersBtn"
+                                class="flex-1 bg-gradient-to-r from-green-600 to-teal-600 text-white py-3 rounded-lg font-semibold hover:from-green-700 hover:to-teal-700 transition transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" disabled>
+                                <i class="fas fa-plus-circle mr-2"></i>
+                                Create Orders
+                            </button>
+                        </div>
+                        
+                        <!-- Order Creation Progress -->
+                        <div id="orderProgress" class="hidden mt-4">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>Creating orders...</span>
+                                <span id="progressText">0/0</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Controls -->
+                    <div class="glass-effect rounded-xl shadow-lg p-6 mt-6 fade-in">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            <i class="fas fa-cog mr-2 text-purple-600"></i>
+                            Distribution Controls
+                        </h2>
+                        
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Price Spacing
+                                </label>
+                                <input type="range" id="spacingSlider" min="0" max="100" value="50" 
+                                    class="w-full" oninput="updateSpacingLabel()">
+                                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                    <span>Linear</span>
+                                    <span id="spacingLabel" class="font-semibold text-purple-600">Exponential (1.5)</span>
+                                    <span>Exponential (3.0)</span>
+                                </div>
+                                <div class="mt-2">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" id="spacingDirection" class="mr-2">
+                                        <span class="text-sm">Reverse Direction</span>
+                                    </label>
+                                </div>
+                                <canvas id="spacingCurve" class="curve-preview w-full"></canvas>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Order Value
+                                </label>
+                                <input type="range" id="valueSlider" min="-50" max="100" value="50" 
+                                    class="w-full" oninput="updateValueLabel()">
+                                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                    <span>Identical</span>
+                                    <span id="valueLabel" class="font-semibold text-purple-600">Exponential (1.5)</span>
+                                    <span>Exponential (3.0)</span>
+                                </div>
+                                <div class="mt-2">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" id="valueDirection" class="mr-2">
+                                        <span class="text-sm">Reverse Direction</span>
+                                    </label>
+                                </div>
+                                <canvas id="valueCurve" class="curve-preview w-full"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Open Orders Panel -->
+                    <div class="glass-effect rounded-xl shadow-lg p-6 mt-6 fade-in">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            <i class="fas fa-list mr-2 text-purple-600"></i>
+                            Open Limit Orders
+                        </h2>
+                        <div id="openOrdersContainer" class="space-y-2 max-h-64 overflow-y-auto">
+                            <p class="text-sm text-gray-500">No open orders for this pair</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Panel -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Chart -->
+                    <div class="glass-effect rounded-xl shadow-lg p-6 fade-in">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-semibold flex items-center">
+                                <i class="fas fa-chart-bar mr-2 text-purple-600"></i>
+                                Order Distribution
+                            </h2>
+                            <div class="flex space-x-2">
+                                <button onclick="switchVisualization('scatter')" id="scatterBtn" 
+                                    class="visualization-toggle active px-3 py-1 rounded-lg text-sm font-medium transition">
+                                    <i class="fas fa-chart-scatter mr-1"></i>Scatter
+                                </button>
+                                <button onclick="switchVisualization('bar')" id="barBtn" 
+                                    class="visualization-toggle px-3 py-1 rounded-lg text-sm font-medium transition bg-gray-200">
+                                    <i class="fas fa-chart-bar mr-1"></i>Bar
+                                </button>
+                                <button onclick="switchVisualization('bubble')" id="bubbleBtn" 
+                                    class="visualization-toggle px-3 py-1 rounded-lg text-sm font-medium transition bg-gray-200">
+                                    <i class="fas fa-circle mr-1"></i>Bubble
+                                </button>
+                            </div>
+                        </div>
+                        <div class="relative h-80">
+                            <canvas id="orderChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Sell Orders (moved to top) -->
+                    <div class="glass-effect rounded-xl shadow-lg p-6 fade-in">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center text-red-600">
+                            <i class="fas fa-arrow-up mr-2"></i>
+                            Sell Orders
+                        </h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-gray-200">
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Price</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Quantity</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Value ($)</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Distance</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sellOrdersTable" class="divide-y divide-gray-100">
+                                    <!-- Orders will be inserted here -->
+                                </tbody>
+                                <tfoot>
+                                    <tr class="sum-row border-t-2 border-indigo-200">
+                                        <td class="py-3 px-3 font-semibold text-indigo-700">Total</td>
+                                        <td class="py-3 px-3 font-semibold text-indigo-700" id="sellTotalQuantity">0</td>
+                                        <td class="py-3 px-3 font-semibold text-indigo-700" id="sellTotalValue">$0</td>
+                                        <td class="py-3 px-3"></td>
+                                        <td class="py-3 px-3"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Buy Orders -->
+                    <div class="glass-effect rounded-xl shadow-lg p-6 fade-in">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center text-green-600">
+                            <i class="fas fa-arrow-down mr-2"></i>
+                            Buy Orders
+                        </h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-gray-200">
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Price</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Quantity</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Value ($)</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Distance</th>
+                                        <th class="text-left py-2 px-3 text-sm font-semibold text-gray-700">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="buyOrdersTable" class="divide-y divide-gray-100">
+                                    <!-- Orders will be inserted here -->
+                                </tbody>
+                                <tfoot>
+                                    <tr class="sum-row border-t-2 border-indigo-200">
+                                        <td class="py-3 px-3 font-semibold text-indigo-700">Total</td>
+                                        <td class="py-3 px-3 font-semibold text-indigo-700" id="buyTotalQuantity">0</td>
+                                        <td class="py-3 px-3 font-semibold text-indigo-700" id="buyTotalValue">$0</td>
+                                        <td class="py-3 px-3"></td>
+                                        <td class="py-3 px-3"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Summary -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="glass-effect rounded-xl shadow-lg p-4 fade-in">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Buy Value</p>
+                                    <p class="text-2xl font-bold text-green-600" id="totalBuyValue">$0</p>
+                                </div>
+                                <i class="fas fa-shopping-cart text-3xl text-green-200"></i>
+                            </div>
+                        </div>
+                        <div class="glass-effect rounded-xl shadow-lg p-4 fade-in">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Sell Value</p>
+                                    <p class="text-2xl font-bold text-red-600" id="totalSellValue">$0</p>
+                                </div>
+                                <i class="fas fa-hand-holding-usd text-3xl text-red-200"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Warning Message -->
+                    <div id="warningMessage" class="hidden glass-effect rounded-xl shadow-lg p-4 fade-in bg-yellow-50 border border-yellow-200">
+                        <div class="flex items-center">
+                            <i class="fas fa-exclamation-triangle text-yellow-600 mr-3 warning-badge"></i>
+                            <div>
+                                <p class="text-sm font-semibold text-yellow-800">Minimum Order Value Applied</p>
+                                <p class="text-xs text-yellow-700">Some orders have been adjusted to meet the minimum order value requirement.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let chart = null;
+        let currentVisualization = 'scatter';
+        let buyOrdersData = [];
+        let sellOrdersData = [];
+        let currentPriceValue = 0;
+        let spacingCurveChart = null;
+        let valueCurveChart = null;
+        let allPairs = [];
+        let openOrders = [];
+        let orderStatuses = {}; // Track order creation status
+        
+        // API base URL
+        const API_BASE = 'http://localhost:3000';
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved settings from localStorage
+            loadSettingsFromStorage();
+            
+            // Fetch initial data
+            refreshData();
+            
+            // Set up event listeners
+            document.getElementById('pairSelector').addEventListener('change', onPairChange);
+            
+            // Auto-save slider values to localStorage
+            document.getElementById('spacingSlider').addEventListener('input', saveSettingsToStorage);
+            document.getElementById('valueSlider').addEventListener('input', saveSettingsToStorage);
+            document.getElementById('spacingDirection').addEventListener('change', saveSettingsToStorage);
+            document.getElementById('valueDirection').addEventListener('change', saveSettingsToStorage);
+            
+            // Auto-calculate on input change
+            document.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculateOrders);
+            });
+        });
+        
+        // Load settings from localStorage
+        function loadSettingsFromStorage() {
+            try {
+                const savedPair = localStorage.getItem('selectedPair');
+                if (savedPair) {
+                    // We'll set this after we load the pairs
+                    document.getElementById('pairSelector').dataset.savedPair = savedPair;
+                }
+                
+                const savedSpacingSlider = localStorage.getItem('spacingSlider');
+                if (savedSpacingSlider) {
+                    document.getElementById('spacingSlider').value = savedSpacingSlider;
+                }
+                
+                const savedValueSlider = localStorage.getItem('valueSlider');
+                if (savedValueSlider) {
+                    document.getElementById('valueSlider').value = savedValueSlider;
+                }
+                
+                const savedSpacingDirection = localStorage.getItem('spacingDirection');
+                if (savedSpacingDirection) {
+                    document.getElementById('spacingDirection').checked = savedSpacingDirection === 'true';
+                }
+                
+                const savedValueDirection = localStorage.getItem('valueDirection');
+                if (savedValueDirection) {
+                    document.getElementById('valueDirection').checked = savedValueDirection === 'true';
+                }
+                
+                // Update labels after loading
+                updateSpacingLabel();
+                updateValueLabel();
+            } catch (error) {
+                console.error('Error loading settings from localStorage:', error);
+            }
+        }
+        
+        // Save settings to localStorage
+        function saveSettingsToStorage() {
+            try {
+                localStorage.setItem('selectedPair', document.getElementById('pairSelector').value);
+                localStorage.setItem('spacingSlider', document.getElementById('spacingSlider').value);
+                localStorage.setItem('valueSlider', document.getElementById('valueSlider').value);
+                localStorage.setItem('spacingDirection', document.getElementById('spacingDirection').checked);
+                localStorage.setItem('valueDirection', document.getElementById('valueDirection').checked);
+            } catch (error) {
+                console.error('Error saving settings to localStorage:', error);
+            }
+        }
+        
+        // Refresh data from server
+        async function refreshData() {
+            const refreshIcon = document.getElementById('refreshIcon');
+            refreshIcon.classList.add('fa-spin');
+            
+            try {
+                // Fetch all data in parallel
+                const [pairsResponse, balancesResponse] = await Promise.all([
+                    fetch(`${API_BASE}/pairs`),
+                    fetch(`${API_BASE}/balances`)
+                ]);
+                
+                if (!pairsResponse.ok || !balancesResponse.ok) {
+                    throw new Error('Failed to fetch data from server');
+                }
+                
+                const pairs = await pairsResponse.json();
+                const balances = await balancesResponse.json();
+                
+                // Update pairs dropdown
+                updatePairsDropdown(pairs);
+                
+                // Update balances
+                updateBalances(balances);
+                
+                // If we have a saved pair, select it
+                const savedPair = document.getElementById('pairSelector').dataset.savedPair;
+                if (savedPair) {
+                    document.getElementById('pairSelector').value = savedPair;
+                    onPairChange();
+                } else if (pairs.length > 0) {
+                    // Select the first pair by default
+                    document.getElementById('pairSelector').value = pairs[0].altname;
+                    onPairChange();
+                }
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                showNotification('Failed to refresh data. Please check your connection to the server.', 'error');
+            } finally {
+                refreshIcon.classList.remove('fa-spin');
+            }
+        }
+        
+        // Update pairs dropdown
+        function updatePairsDropdown(pairs) {
+            allPairs = pairs;
+            const selector = document.getElementById('pairSelector');
+            
+            // Clear existing options
+            selector.innerHTML = '';
+            
+            // Add new options
+            pairs.forEach(pair => {
+                const option = document.createElement('option');
+                option.value = pair.altname;
+                option.textContent = pair.altname;
+                selector.appendChild(option);
+            });
+        }
+        
+        // Update balances
+        function updateBalances(balances) {
+            // Update USD balance display
+            const usdBalance = parseFloat(balances.ZUSD || 0);
+            document.getElementById('usdBalanceActual').textContent = `(${usdBalance.toFixed(2)})`;
+            
+            // We'll update the asset balance when a pair is selected
+        }
+        
+        // Handle pair change
+        async function onPairChange() {
+            const selectedPair = document.getElementById('pairSelector').value;
+            if (!selectedPair) return;
+            
+            // Save to localStorage
+            saveSettingsToStorage();
+            
+            // Find the pair details
+            const pairDetails = allPairs.find(p => p.altname === selectedPair);
+            if (!pairDetails) return;
+            
+            // Extract base asset (e.g., XDG from XDGUSD)
+            const baseAsset = pairDetails.base;
+            
+            // Show loading indicator
+            document.getElementById('priceLoadingIcon').classList.remove('hidden');
+            
+            try {
+                // Fetch current price
+                const priceResponse = await fetch(`${API_BASE}/price?pair=${selectedPair}`);
+                if (!priceResponse.ok) throw new Error('Failed to fetch price');
+                
+                const priceData = await priceResponse.json();
+                const currentPrice = parseFloat(priceData.c);
+                
+                // Update current price
+                document.getElementById('currentPrice').value = currentPrice.toFixed(4);
+                
+                // Calculate and update ranges (4% of price)
+                const rangeAmount = (currentPrice * 0.04).toFixed(4);
+                document.getElementById('positiveRange').value = rangeAmount;
+                document.getElementById('negativeRange').value = rangeAmount;
+                
+                // Fetch balances to get asset balance
+                const balancesResponse = await fetch(`${API_BASE}/balances`);
+                if (!balancesResponse.ok) throw new Error('Failed to fetch balances');
+                
+                const balances = await balancesResponse.json();
+                const assetBalance = parseFloat(balances[baseAsset] || 0);
+                
+                // Update asset balance display
+                document.getElementById('assetBalanceActual').textContent = `(${assetBalance.toFixed(2)})`;
+                
+                // Fetch open orders for this pair
+                await fetchOpenOrders(selectedPair);
+                
+                // Calculate orders with new data
+                calculateOrders();
+            } catch (error) {
+                console.error('Error updating pair data:', error);
+                showNotification('Failed to update pair data. Please try again.', 'error');
+            } finally {
+                document.getElementById('priceLoadingIcon').classList.add('hidden');
+            }
+        }
+        
+        // Fetch open orders for a specific pair
+        async function fetchOpenOrders(pair) {
+            try {
+                const response = await fetch(`${API_BASE}/orders/open`);
+                if (!response.ok) throw new Error('Failed to fetch open orders');
+                
+                const orders = await response.json();
+                
+                // Filter orders for the selected pair
+                openOrders = orders.filter(order => 
+                    order.descr && order.descr.pair === pair
+                );
+                
+                // Update the open orders display
+                updateOpenOrdersDisplay();
+            } catch (error) {
+                console.error('Error fetching open orders:', error);
+                document.getElementById('openOrdersContainer').innerHTML = 
+                    '<p class="text-sm text-red-500">Failed to load open orders</p>';
+            }
+        }
+        
+        // Update open orders display
+        function updateOpenOrdersDisplay() {
+            const container = document.getElementById('openOrdersContainer');
+            
+            if (openOrders.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500">No open orders for this pair</p>';
+                return;
+            }
+            
+            // Sort orders by price (sell orders descending, buy orders ascending)
+            const sortedOrders = [...openOrders].sort((a, b) => {
+                const aPrice = parseFloat(a.descr.price);
+                const bPrice = parseFloat(b.descr.price);
+                
+                if (a.descr.type === 'sell' && b.descr.type === 'sell') {
+                    return bPrice - aPrice; // Descending for sells
+                } else if (a.descr.type === 'buy' && b.descr.type === 'buy') {
+                    return aPrice - bPrice; // Ascending for buys
+                } else {
+                    return a.descr.type === 'sell' ? -1 : 1; // Sells first
+                }
+            });
+            
+            // Create HTML for orders
+            const ordersHtml = sortedOrders.map(order => {
+                const price = parseFloat(order.descr.price);
+                const volume = parseFloat(order.vol);
+                const type = order.descr.type;
+                const typeColor = type === 'buy' ? 'green' : 'red';
+                const typeIcon = type === 'buy' ? 'arrow-down' : 'arrow-up';
+                
+                return `
+                    <div class="p-2 rounded border border-gray-200 hover:bg-gray-50 transition">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <i class="fas fa-${typeIcon} text-${typeColor}-500 mr-2"></i>
+                                <span class="font-medium text-${typeColor}-600">${type.toUpperCase()}</span>
+                                <span class="ml-2 text-sm">$${price.toFixed(4)}</span>
+                            </div>
+                            <span class="text-sm text-gray-600">${volume.toFixed(2)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = ordersHtml;
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+                type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+            } text-white`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'info-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            // Add to DOM
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        function updateSpacingLabel() {
+            const value = document.getElementById('spacingSlider').value;
+            const label = document.getElementById('spacingLabel');
+            
+            // Map slider value (0-100) to exponent (1.0-3.0)
+            const exponent = 1.0 + (value / 100) * 2.0;
+            label.textContent = `Exponential (${exponent.toFixed(1)})`;
+            
+            // Update curve preview
+            drawCurvePreview('spacingCurve', exponent);
+        }
+        
+        function updateValueLabel() {
+            const value = document.getElementById('valueSlider').value;
+            const label = document.getElementById('valueLabel');
+            
+            // Map slider value (0-100) to exponent (1.0-3.0)
+            const exponent = 1.0 + (value / 100) * 2.0;
+            label.textContent = `Exponential (${exponent.toFixed(1)})`;
+            
+            // Update curve preview
+            drawCurvePreview('valueCurve', exponent);
+        }
+        
+        function drawCurvePreview(canvasId, exponent) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw axes
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(20, canvas.height - 10);
+            ctx.lineTo(canvas.width - 10, canvas.height - 10);
+            ctx.moveTo(20, 10);
+            ctx.lineTo(20, canvas.height - 10);
+            ctx.stroke();
+            
+            // Draw curve
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const points = 50;
+            for (let i = 0; i <= points; i++) {
+                const x = 20 + (i / points) * (canvas.width - 30);
+                const normalizedX = i / points;
+                const y = canvas.height - 10 - (Math.pow(normalizedX, exponent) * (canvas.height - 20));
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function switchVisualization(type) {
+            currentVisualization = type;
+            
+            // Update button styles
+            document.querySelectorAll('.visualization-toggle').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.add('bg-gray-200');
+            });
+            
+            const activeBtn = document.getElementById(type + 'Btn');
+            activeBtn.classList.add('active');
+            activeBtn.classList.remove('bg-gray-200');
+            
+            // Redraw chart
+            if (buyOrdersData.length > 0 || sellOrdersData.length > 0) {
+                updateChart(buyOrdersData, sellOrdersData, currentPriceValue);
+            }
+        }
+        
+        function calculateDistribution(type, count, reverse = false) {
+            const slider = type === 'spacing' ? 
+                document.getElementById('spacingSlider').value : 
+                document.getElementById('valueSlider').value;
+            
+            const direction = type === 'spacing' ? 
+                document.getElementById('spacingDirection').checked : 
+                document.getElementById('valueDirection').checked;
+            
+            // Map slider value (0-100) to exponent (1.0-3.0)
+            const exponent = 1.0 + (slider / 100) * 2.0;
+            
+            const distribution = [];
+            
+            // Generate exponential distribution based on the exponent
+            for (let i = 0; i < count; i++) {
+                // Normalize i to [0, 1] range
+                const normalizedI = i / (count - 1 || 1);
+                // Apply exponential function
+                distribution.push(Math.pow(normalizedI, exponent));
+            }
+            
+            if (reverse || direction) {
+                distribution.reverse();
+            }
+            
+            // Normalize to sum to 1
+            const sum = distribution.reduce((a, b) => a + b, 0);
+            return distribution.map(d => d / sum);
+        }
+        
+        function applyMinimumOrderValue(orders, balance, minOrderValue, isBuy) {
+            if (orders.length === 0) return orders;
+            
+            // Check if any orders are below minimum
+            const hasBelowMinimum = orders.some(order => 
+                isBuy ? order.value < minOrderValue : order.value < minOrderValue
+            );
+            
+            if (!hasBelowMinimum) return orders;
+            
+            // Show warning message
+            document.getElementById('warningMessage').classList.remove('hidden');
+            
+            // Create adjusted orders ensuring minimum values
+            const adjustedOrders = orders.map(order => {
+                let adjustedOrder = { ...order };
+                
+                if (isBuy) {
+                    // For buy orders, ensure minimum value
+                    if (order.value < minOrderValue) {
+                        adjustedOrder.value = minOrderValue;
+                        adjustedOrder.quantity = minOrderValue / order.price;
+                    }
+                } else {
+                    // For sell orders, ensure minimum value
+                    if (order.value < minOrderValue) {
+                        adjustedOrder.value = minOrderValue;
+                        adjustedOrder.quantity = minOrderValue / order.price;
+                    }
+                }
+                
+                return adjustedOrder;
+            });
+            
+            // Calculate total of adjusted orders
+            const totalAdjusted = adjustedOrders.reduce((sum, order) => 
+                sum + (isBuy ? order.value : order.quantity), 0
+            );
+            
+            // If total exceeds balance, scale all orders down proportionally
+            if (totalAdjusted > balance) {
+                const scaleFactor = balance / totalAdjusted;
+                
+                return adjustedOrders.map(order => {
+                    const scaledOrder = { ...order };
+                    
+                    if (isBuy) {
+                        scaledOrder.value *= scaleFactor;
+                        scaledOrder.quantity = scaledOrder.value / scaledOrder.price;
+                    } else {
+                        scaledOrder.quantity *= scaleFactor;
+                        scaledOrder.value = scaledOrder.quantity * scaledOrder.price;
+                    }
+                    
+                    return scaledOrder;
+                });
+            }
+            
+            // If we have remaining balance, distribute it proportionally
+            const remainingBalance = balance - totalAdjusted;
+            if (remainingBalance > 0.01) { // Only if significant remaining balance
+                const totalOriginal = orders.reduce((sum, order) => 
+                    sum + (isBuy ? order.value : order.quantity), 0
+                );
+                
+                return adjustedOrders.map((order, index) => {
+                    const originalOrder = orders[index];
+                    const proportion = (isBuy ? originalOrder.value : originalOrder.quantity) / totalOriginal;
+                    const additional = remainingBalance * proportion;
+                    
+                    const finalOrder = { ...order };
+                    
+                    if (isBuy) {
+                        finalOrder.value += additional;
+                        finalOrder.quantity = finalOrder.value / finalOrder.price;
+                    } else {
+                        finalOrder.quantity += additional;
+                        finalOrder.value = finalOrder.quantity * finalOrder.price;
+                    }
+                    
+                    return finalOrder;
+                });
+            }
+            
+            return adjustedOrders;
+        }
+        
+        function calculateOrders() {
+            const currentPrice = parseFloat(document.getElementById('currentPrice').value);
+            const positiveRange = parseFloat(document.getElementById('positiveRange').value);
+            const negativeRange = parseFloat(document.getElementById('negativeRange').value);
+            const ordersPerSide = parseInt(document.getElementById('ordersPerSide').value);
+            const usdBalance = parseFloat(document.getElementById('usdBalance').value);
+            const assetBalance = parseFloat(document.getElementById('assetBalance').value);
+            const minOrderValue = parseFloat(document.getElementById('minOrderValue').value);
+            
+            currentPriceValue = currentPrice;
+            
+            // Hide warning message initially
+            document.getElementById('warningMessage').classList.add('hidden');
+            
+            // Calculate spacing distribution
+            const spacingDistribution = calculateDistribution('spacing', ordersPerSide);
+            
+            // Calculate value distribution
+            const valueDistribution = calculateDistribution('value', ordersPerSide);
+            
+            // Generate buy orders
+            buyOrdersData = [];
+            let accumulatedSpacing = 0;
+            for (let i = 0; i < ordersPerSide; i++) {
+                accumulatedSpacing += spacingDistribution[i];
+                const price = currentPrice - (negativeRange * accumulatedSpacing);
+                const value = usdBalance * valueDistribution[i];
+                const quantity = value / price;
+                
+                buyOrdersData.push({
+                    price: price,
+                    quantity: quantity,
+                    value: value,
+                    distance: currentPrice - price,
+                    status: 'pending' // Default status
+                });
+            }
+            
+            // Generate sell orders
+            sellOrdersData = [];
+            accumulatedSpacing = 0;
+            for (let i = 0; i < ordersPerSide; i++) {
+                accumulatedSpacing += spacingDistribution[i];
+                const price = currentPrice + (positiveRange * accumulatedSpacing);
+                const quantity = assetBalance * valueDistribution[i];
+                const value = quantity * price;
+                
+                sellOrdersData.push({
+                    price: price,
+                    quantity: quantity,
+                    value: value,
+                    distance: price - currentPrice,
+                    status: 'pending' // Default status
+                });
+            }
+            
+            // Apply minimum order value constraints
+            buyOrdersData = applyMinimumOrderValue(buyOrdersData, usdBalance, minOrderValue, true);
+            sellOrdersData = applyMinimumOrderValue(sellOrdersData, assetBalance, minOrderValue, false);
+            
+            // Reverse sort sell orders by price (highest first)
+            sellOrdersData.sort((a, b) => b.price - a.price);
+            
+            // Reset order statuses
+            orderStatuses = {};
+            
+            // Update tables
+            updateSellOrdersTable(sellOrdersData);
+            updateBuyOrdersTable(buyOrdersData);
+            
+            // Update chart
+            updateChart(buyOrdersData, sellOrdersData, currentPrice);
+            
+            // Update summary
+            updateSummary(buyOrdersData, sellOrdersData);
+            
+            // Enable create orders button
+            document.getElementById('createOrdersBtn').disabled = false;
+        }
+        
+        function updateSellOrdersTable(orders) {
+            const tbody = document.getElementById('sellOrdersTable');
+            tbody.innerHTML = '';
+            
+            let totalQuantity = 0;
+            let totalValue = 0;
+            
+            orders.forEach((order, index) => {
+                const row = document.createElement('tr');
+                row.className = 'order-row hover:bg-red-50 cursor-pointer';
+                row.id = `sell-order-${index}`;
+                
+                // Check if this order is at minimum value
+                const minOrderValue = parseFloat(document.getElementById('minOrderValue').value);
+                const isMinValue = Math.abs(order.value - minOrderValue) < 0.01;
+                
+                totalQuantity += order.quantity;
+                totalValue += order.value;
+                
+                // Get order status
+                const orderStatus = orderStatuses[`sell-${index}`] || 'pending';
+                const statusClass = orderStatus === 'created' ? 'bg-green-100 text-green-800' : 
+                                   orderStatus === 'failed' ? 'bg-red-100 text-red-800' : 
+                                   'bg-gray-100 text-gray-800';
+                const statusText = orderStatus === 'created' ? 'Created' : 
+                                  orderStatus === 'failed' ? 'Failed' : 
+                                  'Pending';
+                
+                row.innerHTML = `
+                    <td class="py-3 px-3">
+                        <span class="font-semibold text-red-600">$${order.price.toFixed(4)}</span>
+                    </td>
+                    <td class="py-3 px-3">${order.quantity.toFixed(2)}</td>
+                    <td class="py-3 px-3">
+                        $${order.value.toFixed(2)}
+                        ${isMinValue ? '<span class="ml-1 text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">min</span>' : ''}
+                    </td>
+                    <td class="py-3 px-3">
+                        <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                            ${order.distance.toFixed(4)}
+                        </span>
+                    </td>
+                    <td class="py-3 px-3">
+                        <span class="text-xs ${statusClass} px-2 py-1 rounded-full">${statusText}</span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Update sum row
+            document.getElementById('sellTotalQuantity').textContent = totalQuantity.toFixed(2);
+            document.getElementById('sellTotalValue').textContent = `$${totalValue.toFixed(2)}`;
+        }
+        
+        function updateBuyOrdersTable(orders) {
+            const tbody = document.getElementById('buyOrdersTable');
+            tbody.innerHTML = '';
+            
+            let totalQuantity = 0;
+            let totalValue = 0;
+            
+            orders.forEach((order, index) => {
+                const row = document.createElement('tr');
+                row.className = 'order-row hover:bg-green-50 cursor-pointer';
+                row.id = `buy-order-${index}`;
+                
+                // Check if this order is at minimum value
+                const minOrderValue = parseFloat(document.getElementById('minOrderValue').value);
+                const isMinValue = Math.abs(order.value - minOrderValue) < 0.01;
+                
+                totalQuantity += order.quantity;
+                totalValue += order.value;
+                
+                // Get order status
+                const orderStatus = orderStatuses[`buy-${index}`] || 'pending';
+                const statusClass = orderStatus === 'created' ? 'bg-green-100 text-green-800' : 
+                                   orderStatus === 'failed' ? 'bg-red-100 text-red-800' : 
+                                   'bg-gray-100 text-gray-800';
+                const statusText = orderStatus === 'created' ? 'Created' : 
+                                  orderStatus === 'failed' ? 'Failed' : 
+                                  'Pending';
+                
+                row.innerHTML = `
+                    <td class="py-3 px-3">
+                        <span class="font-semibold text-green-600">$${order.price.toFixed(4)}</span>
+                    </td>
+                    <td class="py-3 px-3">${order.quantity.toFixed(2)}</td>
+                    <td class="py-3 px-3">
+                        $${order.value.toFixed(2)}
+                        ${isMinValue ? '<span class="ml-1 text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">min</span>' : ''}
+                    </td>
+                    <td class="py-3 px-3">
+                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            ${order.distance.toFixed(4)}
+                        </span>
+                    </td>
+                    <td class="py-3 px-3">
+                        <span class="text-xs ${statusClass} px-2 py-1 rounded-full">${statusText}</span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Update sum row
+            document.getElementById('buyTotalQuantity').textContent = totalQuantity.toFixed(2);
+            document.getElementById('buyTotalValue').textContent = `$${totalValue.toFixed(2)}`;
+        }
+        
+        // Create orders on the server
+        async function createOrders() {
+            const selectedPair = document.getElementById('pairSelector').value;
+            if (!selectedPair) {
+                showNotification('Please select a trading pair', 'error');
+                return;
+            }
+            
+            if (buyOrdersData.length === 0 && sellOrdersData.length === 0) {
+                showNotification('No orders to create. Please calculate orders first.', 'error');
+                return;
+            }
+            
+            // Disable button and show progress
+            const createBtn = document.getElementById('createOrdersBtn');
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+            
+            const progressContainer = document.getElementById('orderProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressContainer.classList.remove('hidden');
+            
+            const totalOrders = buyOrdersData.length + sellOrdersData.length;
+            let completedOrders = 0;
+            let successCount = 0;
+            let failCount = 0;
+            
+            // Reset order statuses
+            orderStatuses = {};
+            
+            // Create sell orders first (higher priority)
+            for (let i = 0; i < sellOrdersData.length; i++) {
+                const order = sellOrdersData[i];
+                
+                try {
+                    const response = await fetch(`${API_BASE}/orders/limit`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            pair: selectedPair,
+                            type: 'sell',
+                            price: parseFloat(order.price.toFixed(6)),
+                            qty: parseFloat(order.quantity.toFixed(6))
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        orderStatuses[`sell-${i}`] = 'created';
+                        successCount++;
+                    } else {
+                        orderStatuses[`sell-${i}`] = 'failed';
+                        failCount++;
+                    }
+                } catch (error) {
+                    console.error('Error creating sell order:', error);
+                    orderStatuses[`sell-${i}`] = 'failed';
+                    failCount++;
+                }
+                
+                completedOrders++;
+                updateProgress(completedOrders, totalOrders, progressFill, progressText);
+                updateSellOrdersTable(sellOrdersData);
+                
+                // Refresh open orders after each successful creation
+                if (orderStatuses[`sell-${i}`] === 'created') {
+                    await fetchOpenOrders(selectedPair);
+                }
+            }
+            
+            // Create buy orders
+            for (let i = 0; i < buyOrdersData.length; i++) {
+                const order = buyOrdersData[i];
+                
+                try {
+                    const response = await fetch(`${API_BASE}/orders/limit`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            pair: selectedPair,
+                            type: 'buy',
+                            price: parseFloat(order.price.toFixed(6)),
+                            qty: parseFloat(order.quantity.toFixed(6))
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        orderStatuses[`buy-${i}`] = 'created';
+                        successCount++;
+                    } else {
+                        orderStatuses[`buy-${i}`] = 'failed';
+                        failCount++;
+                    }
+                } catch (error) {
+                    console.error('Error creating buy order:', error);
+                    orderStatuses[`buy-${i}`] = 'failed';
+                    failCount++;
+                }
+                
+                completedOrders++;
+                updateProgress(completedOrders, totalOrders, progressFill, progressText);
+                updateBuyOrdersTable(buyOrdersData);
+                
+                // Refresh open orders after each successful creation
+                if (orderStatuses[`buy-${i}`] === 'created') {
+                    await fetchOpenOrders(selectedPair);
+                }
+            }
+            
+            // Hide progress and restore button
+            progressContainer.classList.add('hidden');
+            createBtn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Create Orders';
+            
+            // Show completion message
+            if (failCount === 0) {
+                showNotification(`Successfully created ${successCount} orders`, 'success');
+            } else {
+                showNotification(`Created ${successCount} orders, ${failCount} failed`, 'error');
+            }
+        }
+        
+        // Update progress bar
+        function updateProgress(completed, total, fillElement, textElement) {
+            const percentage = (completed / total) * 100;
+            fillElement.style.width = `${percentage}%`;
+            textElement.textContent = `${completed}/${total}`;
+        }
+        
+        function updateChart(buyOrders, sellOrders, currentPrice) {
+            const ctx = document.getElementById('orderChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            if (currentVisualization === 'scatter') {
+                // Scatter plot - best for visualizing exponential spacing
+                const buyData = buyOrders.map(o => ({x: o.price, y: o.value}));
+                const sellData = sellOrders.map(o => ({x: o.price, y: o.value}));
+                const currentPoint = {x: currentPrice, y: 0};
+                
+                chart = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'Buy Orders',
+                            data: buyData,
+                            backgroundColor: 'rgba(34, 197, 94, 0.6)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10
+                        }, {
+                            label: 'Sell Orders',
+                            data: sellData,
+                            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10
+                        }, {
+                            label: 'Current Price',
+                            data: [currentPoint],
+                            backgroundColor: 'rgba(99, 102, 241, 1)',
+                            borderColor: 'rgba(99, 102, 241, 1)',
+                            borderWidth: 2,
+                            pointRadius: 10,
+                            pointHoverRadius: 12,
+                            pointStyle: 'triangle'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': Price $' + context.parsed.x.toFixed(4) + ', Value $' + context.parsed.y.toFixed(2);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: {
+                                    display: true,
+                                    text: 'Price ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(4);
+                                    }
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Order Value ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else if (currentVisualization === 'bubble') {
+                // Bubble chart - size represents order value
+                const buyData = buyOrders.map(o => ({
+                    x: o.price,
+                    y: 0,
+                    r: Math.sqrt(o.value) * 2
+                }));
+                const sellData = sellOrders.map(o => ({
+                    x: o.price,
+                    y: 0,
+                    r: Math.sqrt(o.value) * 2
+                }));
+                
+                chart = new Chart(ctx, {
+                    type: 'bubble',
+                    data: {
+                        datasets: [{
+                            label: 'Buy Orders',
+                            data: buyData,
+                            backgroundColor: 'rgba(34, 197, 94, 0.4)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            borderWidth: 2
+                        }, {
+                            label: 'Sell Orders',
+                            data: sellData,
+                            backgroundColor: 'rgba(239, 68, 68, 0.4)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = Math.pow(context.raw.r / 2, 2);
+                                        return context.dataset.label + ': Price $' + context.parsed.x.toFixed(4) + ', Value $' + value.toFixed(2);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: {
+                                    display: true,
+                                    text: 'Price ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(4);
+                                    }
+                                }
+                            },
+                            y: {
+                                display: false,
+                                min: -1,
+                                max: 1
+                            }
+                        }
+                    }
+                });
+            } else {
+                // Bar chart - traditional view
+                const allPrices = [...buyOrders.map(o => o.price), currentPrice, ...sellOrders.map(o => o.price)];
+                const buyValues = [...buyOrders.map(o => o.value), 0, ...Array(sellOrders.length).fill(0)];
+                const sellValues = [...Array(buyOrders.length).fill(0), 0, ...sellOrders.map(o => o.value)];
+                
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: allPrices.map(p => p.toFixed(4)),
+                        datasets: [{
+                            label: 'Buy Orders',
+                            data: buyValues,
+                            backgroundColor: 'rgba(34, 197, 94, 0.6)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            borderWidth: 1
+                        }, {
+                            label: 'Sell Orders',
+                            data: sellValues,
+                            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Price ($)'
+                                },
+                                ticks: {
+                                    callback: function(value, index) {
+                                        return '$' + this.getLabelForValue(value);
+                                    }
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Order Value ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        function updateSummary(buyOrders, sellOrders) {
+            const totalBuyValue = buyOrders.reduce((sum, order) => sum + order.value, 0);
+            const totalSellValue = sellOrders.reduce((sum, order) => sum + order.value, 0);
+            const totalOrders = buyOrders.length + sellOrders.length;
+            const totalValue = totalBuyValue + totalSellValue;
+            
+            document.getElementById('totalBuyValue').textContent = `$${totalBuyValue.toFixed(2)}`;
+            document.getElementById('totalSellValue').textContent = `$${totalSellValue.toFixed(2)}`;
+            document.getElementById('totalOrders').textContent = totalOrders;
+            document.getElementById('totalValue').textContent = `$${totalValue.toFixed(2)}`;
+        }
+    </script>
+</body>
+</html>
