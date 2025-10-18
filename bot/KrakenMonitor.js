@@ -2,8 +2,8 @@ const WebSocket = require('ws');
 const Data = require('./Data');
 
 /**
- * KrakenMonitor provides helpers to watch public OHLC price data and private
- * execution events (fills) via Kraken WebSocket API v2.
+ * KrakenMonitor provides helpers to watch public OHLC price data, L2 order book streams,
+ * and private execution events (fills) via Kraken WebSocket API v2.
  *
  * Environment:
  * - KRAKEN_API_KEY
@@ -26,6 +26,10 @@ class KrakenMonitor {
         // key -> { pair, symbol, interval, handlers, subscribed, snapshot }
         this._priceHandlers = new Map();
         this._pendingPublic = new Set();
+
+        // key -> { pair, symbol, depth, snapshot, handlers, subscribed }
+        this._bookHandlers = new Map();
+        this._pendingBook = new Set();
 
         this._limitOrderHandlers = new Map(); // id -> callback
         this._executionsSubscribed = false;
@@ -137,11 +141,77 @@ class KrakenMonitor {
     }
 
     /**
+     * Subscribe to order book updates for a pair.
+     */
+    onOrderBook(pair, callback, opts = {}) {
+        if (typeof pair !== 'string' || !pair.trim()) {
+            throw new Error('A valid trading pair string is required');
+        }
+        if (typeof callback !== 'function') {
+            throw new Error('A callback function is required for onOrderBook');
+        }
+
+        const depth = Number.isInteger(opts.depth) && opts.depth > 0 ? opts.depth : 10;
+        const snapshot = opts.snapshot !== undefined ? Boolean(opts.snapshot) : true;
+
+        const pairName = pair.trim();
+        const symbol = this._toWsSymbol(pairName);
+        const key = this._bookKey(symbol);
+
+        let entry = this._bookHandlers.get(key);
+        if (!entry) {
+            entry = {
+                pair: pairName,
+                symbol,
+                depth,
+                snapshot,
+                handlers: new Map(),
+                subscribed: false
+            };
+            this._bookHandlers.set(key, entry);
+        } else {
+            entry.depth = depth;
+            entry.snapshot = snapshot;
+        }
+
+        const handlerId = this._nextId();
+        entry.handlers.set(handlerId, callback);
+
+        if (!entry.subscribed) {
+            entry.subscribed = true;
+            this._pendingBook.add(key);
+            this._subscribeBook(entry).catch((error) => {
+                entry.subscribed = false;
+                this.logger.error(`Failed to subscribe to order book for ${entry.symbol}: ${error.message}`);
+            });
+        }
+
+        return {
+            unsubscribe: () => {
+                const stored = this._bookHandlers.get(key);
+                if (!stored) {
+                    return;
+                }
+                stored.handlers.delete(handlerId);
+                if (stored.handlers.size === 0) {
+                    this._bookHandlers.delete(key);
+                    this._pendingBook.delete(key);
+                    this._unsubscribeBook(stored).catch((error) => {
+                        this.logger.error(`Failed to unsubscribe from order book for ${stored.symbol}: ${error.message}`);
+                    });
+                }
+            }
+        };
+    }
+
+    /**
      * Close sockets and clear listeners.
      */
     async close() {
         this._priceHandlers.clear();
         this._pendingPublic.clear();
+        this._bookHandlers.clear();
+        this._pendingBook.clear();
         this._limitOrderHandlers.clear();
         this._executionsSubscribed = false;
 
@@ -183,6 +253,41 @@ class KrakenMonitor {
         await this._sendWhenOpen(this.publicSocket, payload);
 
         if (this._priceHandlers.size === 0) {
+            await this._closeSocket(this.publicSocket);
+            this.publicSocket = null;
+        }
+    }
+
+    async _subscribeBook(entry) {
+        await this._ensurePublicSocket();
+        const params = {
+            channel: 'book',
+            symbol: [entry.symbol],
+            depth: entry.depth,
+            snapshot: entry.snapshot
+        };
+        if (!entry.snapshot) {
+            delete params.snapshot;
+        }
+        await this._sendWhenOpen(this.publicSocket, {
+            method: 'subscribe',
+            params
+        });
+    }
+
+    async _unsubscribeBook(entry) {
+        if (!this.publicSocket) {
+            return;
+        }
+        await this._sendWhenOpen(this.publicSocket, {
+            method: 'unsubscribe',
+            params: {
+                channel: 'book',
+                symbol: [entry.symbol]
+            }
+        });
+
+        if (this._priceHandlers.size === 0 && this._bookHandlers.size === 0) {
             await this._closeSocket(this.publicSocket);
             this.publicSocket = null;
         }
@@ -256,13 +361,18 @@ class KrakenMonitor {
             socket.on('close', () => {
                 this.logger.warn('Public WebSocket connection closed');
                 this.publicSocket = null;
-                if (this.autoReconnect && this._priceHandlers.size > 0) {
+                if (this.autoReconnect && (this._priceHandlers.size > 0 || this._bookHandlers.size > 0)) {
                     this._priceHandlers.forEach((entry, key) => {
                         entry.subscribed = false;
                         this._pendingPublic.add(key);
                     });
+                    this._bookHandlers.forEach((entry, key) => {
+                        entry.subscribed = false;
+                        this._pendingBook.add(key);
+                    });
                     setTimeout(() => {
                         this._resubscribePriceFeeds(true);
+                        this._resubscribeBookFeeds(true);
                     }, 1000);
                 }
             });
@@ -419,36 +529,67 @@ class KrakenMonitor {
             return;
         }
 
+        if (message.channel === 'book') {
+            this._processBook(message);
+            return;
+        }
+
         this.logger.debug && this.logger.debug('Unhandled public message:', message);
     }
 
     _handlePublicAck(message) {
-        if (message.method === 'subscribe') {
-            const { symbol, interval } = message.result || {};
-            const key = this._priceKey(symbol, interval);
-            const entry = this._priceHandlers.get(key);
+        const result = message.result || {};
+        const channel = result.channel || message.params?.channel;
+        const paramsSymbol = Array.isArray(message.params?.symbol) ? message.params.symbol[0] : message.params?.symbol;
 
-            if (message.success) {
-                if (entry) {
-                    entry.subscribed = true;
-                    this._pendingPublic.delete(key);
+        if (message.method === 'subscribe') {
+            if (channel === 'ohlc') {
+                const key = this._priceKey(result.symbol || paramsSymbol, result.interval);
+                const entry = this._priceHandlers.get(key);
+                if (message.success) {
+                    if (entry) {
+                        entry.subscribed = true;
+                        this._pendingPublic.delete(key);
+                    }
+                } else {
+                    if (entry) {
+                        entry.subscribed = false;
+                    }
+                    this.logger.error('Public subscription error:', message.error || message);
                 }
-            } else {
-                if (entry) {
-                    entry.subscribed = false;
+            } else if (channel === 'book') {
+                const key = this._bookKey(result.symbol || paramsSymbol);
+                const entry = this._bookHandlers.get(key);
+                if (message.success) {
+                    if (entry) {
+                        entry.subscribed = true;
+                        this._pendingBook.delete(key);
+                    }
+                } else {
+                    if (entry) {
+                        entry.subscribed = false;
+                    }
+                    this.logger.error('Order book subscription error:', message.error || message);
                 }
-                this.logger.error('Public subscription error:', message.error || message);
             }
             return;
         }
 
         if (message.method === 'unsubscribe') {
-            const { symbol, interval } = message.result || {};
-            const key = this._priceKey(symbol, interval);
-            const entry = this._priceHandlers.get(key);
-            if (entry) {
-                entry.subscribed = message.success ? false : entry.subscribed;
+            if (channel === 'ohlc') {
+                const key = this._priceKey(result.symbol || paramsSymbol, result.interval);
+                const entry = this._priceHandlers.get(key);
+                if (entry) {
+                    entry.subscribed = message.success ? false : entry.subscribed;
+                }
+            } else if (channel === 'book') {
+                const key = this._bookKey(result.symbol || paramsSymbol);
+                const entry = this._bookHandlers.get(key);
+                if (entry) {
+                    entry.subscribed = message.success ? false : entry.subscribed;
+                }
             }
+
             if (!message.success) {
                 this.logger.error('Public unsubscription error:', message.error || message);
             }
@@ -476,6 +617,69 @@ class KrakenMonitor {
                     this.logger.error('Error in price handler:', error.message);
                 }
             });
+        });
+    }
+
+    _processBook(message) {
+        const { data = [], type, timestamp } = message;
+        if (!Array.isArray(data) || data.length === 0) {
+            return;
+        }
+
+        const firstEntry = data[0] || {};
+        const rawBook = firstEntry.book || firstEntry;
+        const symbol = rawBook.symbol || message.symbol;
+        const key = this._bookKey(symbol);
+        const entry = this._bookHandlers.get(key);
+        if (!entry) {
+            return;
+        }
+
+        const parseLevels = (levels) => {
+            if (!Array.isArray(levels)) {
+                return [];
+            }
+            return levels
+                .map((level) => {
+                    if (!level) {
+                        return null;
+                    }
+                    const price = typeof level.price === 'string' ? parseFloat(level.price) : level.price;
+                    const qty = typeof level.qty === 'string' ? parseFloat(level.qty) : level.qty;
+                    if (!Number.isFinite(price) || !Number.isFinite(qty)) {
+                        return null;
+                    }
+                    return { price, qty };
+                })
+                .filter((level) => level !== null);
+        };
+
+        const parseTimestamp = (value) => {
+            if (!value) {
+                return null;
+            }
+            const ts = Date.parse(value);
+            return Number.isNaN(ts) ? null : ts;
+        };
+
+        const tsValue = rawBook.timestamp || firstEntry.timestamp || timestamp || null;
+
+        const payload = {
+            type,
+            symbol: rawBook.symbol || entry.symbol,
+            bids: parseLevels(rawBook.bids),
+            asks: parseLevels(rawBook.asks),
+            checksum: rawBook.checksum,
+            timestamp: tsValue,
+            timestampUnix: parseTimestamp(tsValue)
+        };
+
+        entry.handlers.forEach((handler) => {
+            try {
+                handler(payload);
+            } catch (error) {
+                this.logger.error('Error in order book handler:', error.message);
+            }
         });
     }
 
@@ -631,9 +835,29 @@ class KrakenMonitor {
         });
     }
 
+    _resubscribeBookFeeds(force = false) {
+        this._bookHandlers.forEach((entry, key) => {
+            if (force) {
+                entry.subscribed = false;
+            }
+            if (!entry.subscribed && !this._pendingBook.has(key)) {
+                entry.subscribed = true;
+                this._pendingBook.add(key);
+                this._subscribeBook(entry).catch((error) => {
+                    entry.subscribed = false;
+                    this.logger.error(`Failed to resubscribe order book for ${entry.symbol}: ${error.message}`);
+                });
+            }
+        });
+    }
+
     _priceKey(symbol, interval) {
         const normalizedSymbol = this._canonicalPair(symbol);
         return `${normalizedSymbol}:${interval || 1}`;
+    }
+
+    _bookKey(symbol) {
+        return this._canonicalPair(symbol);
     }
 
     _canonicalPair(symbol) {
@@ -687,6 +911,13 @@ class KrakenMonitor {
         }
 
         return upper;
+    }
+
+    normaliseSymbol(pair) {
+        if (typeof pair !== 'string' || !pair.trim()) {
+            throw new Error('Pair must be a non-empty string');
+        }
+        return this._toWsSymbol(pair.trim());
     }
 
     _nextId() {
