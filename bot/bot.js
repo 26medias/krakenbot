@@ -38,10 +38,14 @@ class Bot {
         });
 
         // Check for intial state
-        const orders = await this.getOpenOrders();
-        console.log(`There are currently ${orders.length} open orders for pair ${this.pairName}`);
-        if (!orders || orders.length == 0) {
-            await this.createInitialState();
+        const orderCount = await this.countOpenLimitOrders();
+        console.log(`${orderCount.total} open orders (Buy: ${orderCount.buy}, Sell: ${orderCount.sell})`);
+        if (orderCount.buy == 0 || orderCount.sell == 0) {
+            console.log('One side has no orders, recreating full set of limit orders');
+            await this.resetLimitOrders();
+            const limitOrders = await this.calculateLimitRanges();
+            await this.createLimitOrders(limitOrders.buyOrders, limitOrders.sellOrders);
+            return;
         }
     }
 
@@ -73,24 +77,39 @@ class Bot {
 
         const range = await this.tools.getPriceRange(60);
         const rangeDif = parseFloat((range.high - range.low).toFixed(6));
-        //console.log('rangeDif:', rangeDif);
+        const rawPctRange = parseFloat((((rangeDif * 3) / latest.c) * 100).toFixed(2));
+        const DEFAULT_RANGE_PERCENT = 20;
+        const pctRange = Number.isFinite(rawPctRange) && rawPctRange > 0 ? rawPctRange : DEFAULT_RANGE_PERCENT;
+        console.log('pctRange:', pctRange);
 
         const balance = await this.balance();
         //console.log('Balance:', balance);
 
+        const toPercentOfPrice = (value, fallbackPercent) => {
+            if (!Number.isFinite(value) || value <= 0) {
+                return fallbackPercent;
+            }
+            return parseFloat(((value / latest.c) * 100).toFixed(2));
+        };
+
+        const positiveRangePercent = toPercentOfPrice(positiveRange, pctRange);
+        const negativeRangePercent = toPercentOfPrice(negativeRange, pctRange);
 
         const params = {
             currentPrice: latest.c,
-            positiveRange: positiveRange ? positiveRange : rangeDif*2,
-            negativeRange: negativeRange ? negativeRange : rangeDif*2,
+            positiveRange: latest.c * positiveRangePercent / 100,
+            negativeRange: latest.c * negativeRangePercent / 100,
             ordersPerSide: 10,
-            usdBalance: parseFloat((parseFloat(balance.quote)*this.risk/100).toFixed(6)),
-            assetBalance: parseFloat((parseFloat(balance.base)*this.risk/100).toFixed(6)),
+            usdBalance: parseFloat((parseFloat(balance.quote) * this.risk / 100).toFixed(6)),
+            assetBalance: parseFloat((parseFloat(balance.base) * this.risk / 100).toFixed(6)),
             minOrderValue: 5,
-            spacingCurve: 1,
-            spacingReverse: true,
-            valueCurve: 1,
-            valueReverse: false
+            spacingSpread: 0.53,
+            spacingReverse: false,
+            spacingMarginLeftPercent: 0,
+            spacingMarginRightPercent: 2,
+            valueSpread: -0.14,
+            valueMarginLeftPercent: 20,
+            valueMarginRightPercent: 0,
         };
         //console.log(JSON.stringify(params, null, 4));
 
@@ -104,6 +123,7 @@ class Bot {
         sellOrders.forEach(order => {
             sum_base += order.quantity;
         });
+        sellOrders.reverse();
 
         return { buyOrders, sellOrders, sum_base, sum_quote }
     }
@@ -116,6 +136,7 @@ class Bot {
         if (orderCount.buy == 0 || orderCount.sell == 0) {
             console.log('One side has no orders, recreating full set of limit orders');
             await this.resetLimitOrders();
+            const limitOrders = await this.calculateLimitRanges();
             await this.createLimitOrders(limitOrders.buyOrders, limitOrders.sellOrders);
             return;
         } else {
@@ -138,8 +159,8 @@ class Bot {
             //console.log('Lowest buy price:', lowestBuyOrder);
             //console.log('Highest sell price:', highestSellOrder);
 
-            const rangeUp = parseFloat(highestSellOrder.descr.price)-latest.c;
-            const rangeDown = latest.c-parseFloat(lowestBuyOrder.descr.price);
+            const rangeUp = parseFloat(highestSellOrder.descr.price)-latest.c; // wrong?
+            const rangeDown = latest.c-parseFloat(lowestBuyOrder.descr.price); // wrong?
 
             const limitOrders = await this.calculateLimitRanges(rangeUp, rangeDown);
             
@@ -281,6 +302,15 @@ class Bot {
     }
 
     async createLimitOrders(buyOrders = [], sellOrders = []) {
+        console.log(`Creating ${buyOrders.length} buy orders and ${sellOrders.length} sell orders`);
+        // Display the orders:
+        buyOrders.forEach((order, index) => {
+            console.log(`  BUY  ${index + 1}: Price=${order.price.toFixed(6)} Qty=${order.quantity.toFixed(6)} Value=${order.value.toFixed(6)}`);
+        });
+        sellOrders.forEach((order, index) => {
+            console.log(`  SELL ${index + 1}: Price=${order.price.toFixed(6)} Qty=${order.quantity.toFixed(6)} Value=${order.value.toFixed(6)}`);
+        });
+        //return
         const pairInfo = Array.isArray(this.pair) ? this.pair[0] : null;
         if (!pairInfo) {
             throw new Error('Pair metadata unavailable. Call init() before creating orders.');

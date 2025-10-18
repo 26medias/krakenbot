@@ -10,8 +10,14 @@ class LimitOrders {
             minOrderValue: 0,
             spacingCurve: 0,
             spacingReverse: false,
+            spacingSpread: undefined,
+            spacingMarginLeftPercent: 0,
+            spacingMarginRightPercent: 0,
             valueCurve: 0,
             valueReverse: false,
+            valueSpread: undefined,
+            valueMarginLeftPercent: 0,
+            valueMarginRightPercent: 0,
             ...options
         };
     }
@@ -32,22 +38,53 @@ class LimitOrders {
             minOrderValue,
             spacingCurve,
             spacingReverse,
+            spacingSpread,
+            spacingMarginLeftPercent,
+            spacingMarginRightPercent,
             valueCurve,
-            valueReverse
+            valueReverse,
+            valueSpread,
+            valueMarginLeftPercent,
+            valueMarginRightPercent
         } = this.options;
 
         if (!Number.isFinite(currentPrice) || ordersPerSide <= 0) {
             return { buyOrders: [], sellOrders: [] };
         }
 
-        const spacingDistribution = this.#calculateDistribution(spacingCurve, spacingReverse, ordersPerSide);
-        const valueDistribution = this.#calculateDistribution(valueCurve, valueReverse, ordersPerSide);
+        const spacingSpreadNormalized = this.#normalizeSpread(spacingSpread ?? spacingCurve, spacingReverse) ?? 0;
+        const marginLeft = this.#sanitizeMargin(spacingMarginLeftPercent);
+        const marginRight = this.#sanitizeMargin(spacingMarginRightPercent, 100 - marginLeft);
+        const spacingPositions = this.calculatePointPositions(
+            ordersPerSide,
+            spacingSpreadNormalized,
+            marginLeft,
+            marginRight
+        );
 
-        let accumulatedSpacing = 0;
-        const buyOrders = spacingDistribution.map((spacingFraction, index) => {
-            accumulatedSpacing += spacingFraction;
-            const price = currentPrice - negativeRange * accumulatedSpacing;
-            const rawValue = usdBalance * valueDistribution[index];
+        const negativeRangeClamped = Number.isFinite(negativeRange) ? Math.max(0, negativeRange) : 0;
+        const positiveRangeClamped = Number.isFinite(positiveRange) ? Math.max(0, positiveRange) : 0;
+
+        const {
+            buyWeights,
+            sellWeights
+        } = this.#calculateValueWeights({
+            count: ordersPerSide,
+            spreadInput: valueSpread ?? valueCurve,
+            reverse: valueReverse,
+            marginLeftPercent: valueMarginLeftPercent,
+            marginRightPercent: valueMarginRightPercent
+        });
+
+        const totalBuyWeight = buyWeights.reduce((sum, weight) => sum + weight, 0) || 0;
+        const totalSellWeight = sellWeights.reduce((sum, weight) => sum + weight, 0) || 0;
+        const totalSellValueUsd = assetBalance * currentPrice;
+
+        const buyOrders = spacingPositions.map((position, index) => {
+            const normalizedPosition = this.#clamp(position, 0, 1);
+            const price = currentPrice - negativeRangeClamped + (negativeRangeClamped * normalizedPosition);
+            const weight = buyWeights[index] ?? 0;
+            const rawValue = totalBuyWeight > 0 ? (weight / totalBuyWeight) * usdBalance : 0;
             const quantity = price > 0 ? rawValue / price : 0;
             return {
                 price,
@@ -58,15 +95,16 @@ class LimitOrders {
             };
         });
 
-        accumulatedSpacing = 0;
-        const sellOrders = spacingDistribution.map((spacingFraction, index) => {
-            accumulatedSpacing += spacingFraction;
-            const price = currentPrice + positiveRange * accumulatedSpacing;
-            const quantity = assetBalance * valueDistribution[index];
+        const sellOrders = spacingPositions.map((position, index) => {
+            const normalizedPosition = this.#clamp(1 - this.#clamp(position, 0, 1), 0, 1);
+            const price = currentPrice + positiveRangeClamped * normalizedPosition;
+            const weight = sellWeights[index] ?? 0;
+            const rawValue = totalSellWeight > 0 ? (weight / totalSellWeight) * totalSellValueUsd : 0;
+            const quantity = price > 0 ? rawValue / price : 0;
             return {
                 price,
                 quantity,
-                value: quantity * price,
+                value: rawValue,
                 distance: price - currentPrice,
                 status: 'pending'
             };
@@ -79,6 +117,93 @@ class LimitOrders {
         return {
             buyOrders: adjustedBuys,
             sellOrders: adjustedSells
+        };
+    }
+
+    calculatePointPositions(count, spread /*-1 to 1*/, marginLeftPercent, marginRightPercent) {
+        const positions = [];
+
+        // Convert percentage margins to normalized values (0-1)
+        const marginLeftNorm = marginLeftPercent / 100;
+        const marginRightNorm = marginRightPercent / 100;
+
+        // Calculate the effective width where points can be placed
+        const effectiveWidth = 1 - marginLeftNorm - marginRightNorm;
+
+        // Handle edge cases for count
+        if (count <= 0) {
+            return [];
+        }
+        if (count === 1) {
+            // The single point is in the center of the effective area
+            positions.push(marginLeftNorm + effectiveWidth / 2);
+            return positions;
+        }
+
+        // Loop to calculate positions for each point
+        for (let i = 0; i < count; i++) {
+            let position;
+
+            // The base index for the current point, from 0 to 1
+            const baseIndex = i / (count - 1);
+
+            if (spread === 0) {
+                // Even spacing across the effective width
+                position = baseIndex * effectiveWidth;
+            } else if (spread < 0) {
+                // Exponential from left
+                // The exponent amplifies the effect. A more negative spread means a stronger exponent.
+                const exponent = 1 + Math.abs(spread) * 2;
+                const normalizedPos = Math.pow(baseIndex, exponent);
+                position = normalizedPos * effectiveWidth;
+            } else { // spread > 0
+                // Exponential from right
+                const exponent = 1 + spread * 2;
+                // We invert the logic (1 - ...) to make it exponential from the right
+                const normalizedPos = 1 - Math.pow(1 - baseIndex, exponent);
+                position = normalizedPos * effectiveWidth;
+            }
+
+            // Add the left margin offset to get the final position
+            position += marginLeftNorm;
+
+            // Clamp the value to be strictly within the 0-1 range
+            position = Math.max(0, Math.min(1, position));
+
+            positions.push(position);
+        }
+
+        return positions;
+    }
+
+    #calculateValueWeights({
+        count,
+        spreadInput,
+        reverse,
+        marginLeftPercent,
+        marginRightPercent
+    }) {
+        if (count <= 0) {
+            return { buyWeights: [], sellWeights: [] };
+        }
+
+        const normalizedSpread = this.#normalizeSpread(spreadInput, reverse);
+
+        if (Number.isFinite(normalizedSpread)) {
+            const marginLeft = this.#sanitizeMargin(marginLeftPercent);
+            const marginRight = this.#sanitizeMargin(marginRightPercent, 100 - marginLeft);
+            const positions = this.calculatePointPositions(count, normalizedSpread, marginLeft, marginRight);
+            const weights = [...positions].reverse();
+            return {
+                buyWeights: weights,
+                sellWeights: [...weights]
+            };
+        }
+
+        const fallback = this.#calculateDistribution(spreadInput ?? 0, reverse, count);
+        return {
+            buyWeights: fallback,
+            sellWeights: [...fallback]
         };
     }
 
@@ -216,6 +341,45 @@ class LimitOrders {
                 value: updatedQuantity * order.price
             };
         });
+    }
+
+    #clamp(value, min, max) {
+        if (!Number.isFinite(value)) {
+            return min;
+        }
+        return Math.min(max, Math.max(min, value));
+    }
+
+    #normalizeSpread(spreadInput, reverseFlag) {
+        let spread = Number(spreadInput);
+        if (!Number.isFinite(spread)) {
+            return null;
+        }
+
+        if (Math.abs(spread) > 1) {
+            if (Math.abs(spread) <= 100) {
+                spread = spread / 100;
+            } else {
+                spread = spread > 0 ? 1 : -1;
+            }
+        }
+
+        spread = this.#clamp(spread, -1, 1);
+
+        if (reverseFlag) {
+            spread = -spread;
+        }
+
+        return spread;
+    }
+
+    #sanitizeMargin(input, max = 100) {
+        let margin = Number(input);
+        if (!Number.isFinite(margin)) {
+            margin = 0;
+        }
+        margin = this.#clamp(margin, 0, max);
+        return margin;
     }
 }
 
