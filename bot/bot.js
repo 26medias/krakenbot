@@ -15,6 +15,7 @@ class Bot {
         this.Data = new Data();
         this.monitor = new KrakenMonitor();
         this.subscriptions = {};
+        this.busy = false;
     }
 
     async init() {
@@ -73,11 +74,13 @@ class Bot {
     async calculateLimitRanges(positiveRange, negativeRange) {
         //console.log("calculateLimitRanges()", {positiveRange, negativeRange});
         const latest = await this.tools.getprice();
-        //console.log('Latest candle:', latest);
+        console.log('Current price:', `$${latest.c.toFixed(5)}`);
 
-        const range = await this.tools.getPriceRange(60);
+        const diffMul = 3;
+
+        const range = await this.tools.getPriceRange(120);
         const rangeDif = parseFloat((range.high - range.low).toFixed(6));
-        const rawPctRange = parseFloat((((rangeDif * 3) / latest.c) * 100).toFixed(2));
+        const rawPctRange = parseFloat((((rangeDif * diffMul) / latest.c) * 100).toFixed(2));
         const DEFAULT_RANGE_PERCENT = 20;
         const pctRange = Number.isFinite(rawPctRange) && rawPctRange > 0 ? rawPctRange : DEFAULT_RANGE_PERCENT;
         console.log('pctRange:', pctRange);
@@ -92,6 +95,7 @@ class Bot {
             return parseFloat(((value / latest.c) * 100).toFixed(2));
         };
 
+        // Temp for testing. Do not change.
         const positiveRangePercent = toPercentOfPrice(positiveRange, pctRange);
         const negativeRangePercent = toPercentOfPrice(negativeRange, pctRange);
 
@@ -106,7 +110,7 @@ class Bot {
             spacingSpread: 0.53,
             spacingReverse: false,
             spacingMarginLeftPercent: 0,
-            spacingMarginRightPercent: 2,
+            spacingMarginRightPercent: 3,
             valueSpread: -0.14,
             valueMarginLeftPercent: 20,
             valueMarginRightPercent: 0,
@@ -128,7 +132,18 @@ class Bot {
         return { buyOrders, sellOrders, sum_base, sum_quote }
     }
 
+    async wait(ms) {
+        const delay = Math.max(0, Number(ms) || 0);
+        if (delay === 0) return;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
     async onRebalance(event) {
+        if (this.busy) {
+            console.log('Rebalance already in progress, skipping this event');
+            return;
+        }
+        this.busy = true;
 
         const orderCount = await this.countOpenLimitOrders();
         console.log(`Rebalance check: ${orderCount.total} open orders (Buy: ${orderCount.buy}, Sell: ${orderCount.sell})`);
@@ -138,7 +153,6 @@ class Bot {
             await this.resetLimitOrders();
             const limitOrders = await this.calculateLimitRanges();
             await this.createLimitOrders(limitOrders.buyOrders, limitOrders.sellOrders);
-            return;
         } else {
 
             const openOrders = await this.getOpenOrders();
@@ -178,6 +192,7 @@ class Bot {
                 await this.createLimitOrders(limitOrders.buyOrders, []);
             }
         }
+        this.busy = false;
     }
 
     async getOpenOrders() {
@@ -224,6 +239,9 @@ class Bot {
             console.log(`Cancelling order ${order.id} at price ${order.descr.price}`);
             await this.Data.cancelOrder(order.id);
         }
+
+        console.log("Waiting for orders to settle and balance to update...")
+        await this.wait(1000);
     }
 
     async cancelLimitOrdersByPrice(limitPrice, op = 'gt') {
@@ -310,6 +328,20 @@ class Bot {
         sellOrders.forEach((order, index) => {
             console.log(`  SELL ${index + 1}: Price=${order.price.toFixed(6)} Qty=${order.quantity.toFixed(6)} Value=${order.value.toFixed(6)}`);
         });
+        // Display dum of quote & base
+        let sellStats = {base: 0, quote: 0};
+        sellOrders.forEach(order => {
+            sellStats.base += order.quantity;
+            sellStats.quote += order.value;
+        });
+        let buyStats = {base: 0, quote: 0};
+        buyOrders.forEach(order => {
+            buyStats.base += order.quantity;
+            buyStats.quote += order.value;
+        });
+        console.log(`Total BUY orders: Qty=${buyStats.base.toFixed(6)} Value=${buyStats.quote.toFixed(6)}`);
+        console.log(`Total SELL orders: Qty=${sellStats.base.toFixed(6)} Value=${sellStats.quote.toFixed(6)}`);
+        //
         //return
         const pairInfo = Array.isArray(this.pair) ? this.pair[0] : null;
         if (!pairInfo) {
@@ -500,7 +532,7 @@ Example open limit order format (from getOpenOrders):
 */
 
 (async () => {
-    const bot = new Bot('XDGUSD', 90);
+    const bot = new Bot('MLNUSD', 10);
     await bot.init();
     //await bot.resetLimitOrders();
 

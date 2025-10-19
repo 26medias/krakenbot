@@ -1,10 +1,122 @@
 {
   "open": {
-    "ORWJX7-H5PNQ-AHFJOS": {
+    "OUSBPA-ZGBN7-ELQE22": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.808285,
+      "opentm": 1760847479.093856,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "8.178",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 0.66867093 MLNUSD @ limit 8.178",
+        "close": ""
+      },
+      "vol": "0.66867093",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "O6KQYO-L4QMC-RXLORZ": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.980721,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "8.011",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 0.85374490 MLNUSD @ limit 8.011",
+        "close": ""
+      },
+      "vol": "0.85374490",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "OKCSZK-IT5PY-AFVMKO": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.842344,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "7.772",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 1.07391526 MLNUSD @ limit 7.772",
+        "close": ""
+      },
+      "vol": "1.07391526",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "O7ZV6C-76PMF-EOXYII": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.728726,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "7.460",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 1.33562262 MLNUSD @ limit 7.460",
+        "close": ""
+      },
+      "vol": "1.33562262",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "OLZD7L-DR3BY-H3GHW6": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.724602,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -12,13 +124,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1933469",
+        "price": "0.2263747",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 207.91617265 XDGUSD @ limit 0.1933469",
+        "order": "sell 625.51931119 XDGUSD @ limit 0.2263747",
         "close": ""
       },
-      "vol": "207.91617265",
+      "vol": "625.51931119",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -28,11 +140,39 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OD23RM-YJLHM-LZ4GRH": {
+    "OSWIG7-GYQOO-ANSLKL": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.694032,
+      "opentm": 1760847478.623059,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "7.074",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 1.65033382 MLNUSD @ limit 7.074",
+        "close": ""
+      },
+      "vol": "1.65033382",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "OWIELQ-4BLD3-5TAG7F": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.612066,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -40,13 +180,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1924681",
+        "price": "0.2187581",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 185.48122668 XDGUSD @ limit 0.1924681",
+        "order": "sell 574.82794016 XDGUSD @ limit 0.2187581",
         "close": ""
       },
-      "vol": "185.48122668",
+      "vol": "574.82794016",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -56,11 +196,39 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OBDXKI-TUB4D-ZE6TFM": {
+    "OPESZ7-DNGEY-EWIRD6": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.584637,
+      "opentm": 1760847478.514779,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "6.614",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 2.03636080 MLNUSD @ limit 6.614",
+        "close": ""
+      },
+      "vol": "2.03636080",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "OMR5C7-YFQHL-GZI5TP": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.500086,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -68,13 +236,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1916986",
+        "price": "0.2120877",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 163.55704673 XDGUSD @ limit 0.1916986",
+        "order": "sell 520.73375281 XDGUSD @ limit 0.2120877",
         "close": ""
       },
-      "vol": "163.55704673",
+      "vol": "520.73375281",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -84,11 +252,39 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OVM45X-ENV6T-3PKV4D": {
+    "OUKUN5-Q2LR3-A2LXW3": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.47367,
+      "opentm": 1760847478.403009,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "6.078",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 2.52300356 MLNUSD @ limit 6.078",
+        "close": ""
+      },
+      "vol": "2.52300356",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "OYXSLV-HKGO5-2IQF62": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.363603,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -96,13 +292,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1910373",
+        "price": "0.2063561",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 142.27044419 XDGUSD @ limit 0.1910373",
+        "order": "sell 463.93664762 XDGUSD @ limit 0.2063561",
         "close": ""
       },
-      "vol": "142.27044419",
+      "vol": "463.93664762",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -112,11 +308,39 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "O6VZ6Z-6GYGF-XIXUYI": {
+    "O3W7NR-4XADM-L6HB5J": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.361014,
+      "opentm": 1760847478.296105,
+      "starttm": 0,
+      "expiretm": 0,
+      "descr": {
+        "pair": "MLNUSD",
+        "aclass": "forex",
+        "type": "buy",
+        "ordertype": "limit",
+        "price": "5.466",
+        "price2": "0",
+        "leverage": "none",
+        "order": "buy 3.15910062 MLNUSD @ limit 5.466",
+        "close": ""
+      },
+      "vol": "3.15910062",
+      "vol_exec": "0.00000000",
+      "cost": "0.000000",
+      "fee": "0.000000",
+      "price": "0.000000",
+      "stopprice": "0.000000",
+      "limitprice": "0.000000",
+      "misc": "",
+      "oflags": "fciq"
+    },
+    "O3TJXF-YASCO-D277YE": {
+      "refid": null,
+      "userref": 0,
+      "status": "open",
+      "opentm": 1760847478.250066,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -124,13 +348,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1904833",
+        "price": "0.2015545",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 121.77108415 XDGUSD @ limit 0.1904833",
+        "order": "sell 405.37014367 XDGUSD @ limit 0.2015545",
         "close": ""
       },
-      "vol": "121.77108415",
+      "vol": "405.37014367",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -140,11 +364,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OFJ5CA-6L2OV-VJKS4Q": {
+    "OJ3CBP-KMH77-Y5Q66S": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.251787,
+      "opentm": 1760847478.140944,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -152,13 +376,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1900355",
+        "price": "0.1976728",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 102.24373734 XDGUSD @ limit 0.1900355",
+        "order": "sell 346.23237360 XDGUSD @ limit 0.1976728",
         "close": ""
       },
-      "vol": "102.24373734",
+      "vol": "346.23237360",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -168,11 +392,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OVTC25-QJNUO-L3OXUE": {
+    "O3ERIW-LH54A-4EUQBW": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.142423,
+      "opentm": 1760847478.02529,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -180,13 +404,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1896923",
+        "price": "0.1946986",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 83.93238688 XDGUSD @ limit 0.1896923",
+        "order": "sell 288.04457450 XDGUSD @ limit 0.1946986",
         "close": ""
       },
-      "vol": "83.93238688",
+      "vol": "288.04457450",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -196,11 +420,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OKDTKI-Y3QUO-QRA3ZS": {
+    "OFDTYU-E5VQR-7UY6XR": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823755.037151,
+      "opentm": 1760847477.920244,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -208,13 +432,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1894521",
+        "price": "0.1926162",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 67.19544904 XDGUSD @ limit 0.1894521",
+        "order": "sell 232.80355303 XDGUSD @ limit 0.1926162",
         "close": ""
       },
-      "vol": "67.19544904",
+      "vol": "232.80355303",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -224,11 +448,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OSRHBH-OMIJY-ECVZL2": {
+    "ONZPDT-YWBNU-C4IOPD": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.916214,
+      "opentm": 1760847477.810616,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -236,13 +460,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1893122",
+        "price": "0.1914036",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 52.67196709 XDGUSD @ limit 0.1893122",
+        "order": "sell 183.50642327 XDGUSD @ limit 0.1914036",
         "close": ""
       },
-      "vol": "52.67196709",
+      "vol": "183.50642327",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -252,11 +476,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OARVFE-4RTQE-YY4W5E": {
+    "OGRN4M-DES2R-WQ6CYQ": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.798649,
+      "opentm": 1760847477.697437,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -264,13 +488,13 @@
         "aclass": "forex",
         "type": "sell",
         "ordertype": "limit",
-        "price": "0.1892680",
+        "price": "0.1910210",
         "price2": "0",
         "leverage": "none",
-        "order": "sell 42.47937476 XDGUSD @ limit 0.1892680",
+        "order": "sell 148.25777340 XDGUSD @ limit 0.1910210",
         "close": ""
       },
-      "vol": "42.47937476",
+      "vol": "148.25777340",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -280,11 +504,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OAY2NL-H7UIS-HUACSK": {
+    "OE4ALE-55IQI-NETISI": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.652823,
+      "opentm": 1760845330.374711,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -292,13 +516,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1891016",
+        "price": "0.1889070",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 276.81140341 XDGUSD @ limit 0.1891016",
+        "order": "buy 169.78565954 XDGUSD @ limit 0.1889070",
         "close": ""
       },
-      "vol": "276.81140341",
+      "vol": "169.78565954",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -308,11 +532,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OSJI7P-SYURT-ZAENQX": {
+    "OO5MG6-3NO43-IFY475": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.515406,
+      "opentm": 1760845330.259983,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -320,13 +544,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1890574",
+        "price": "0.1884942",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 343.39031204 XDGUSD @ limit 0.1890574",
+        "order": "buy 211.03464689 XDGUSD @ limit 0.1884942",
         "close": ""
       },
-      "vol": "343.39031204",
+      "vol": "211.03464689",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -336,11 +560,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OX7UKM-RZ7DU-J2XZN6": {
+    "OSVIEL-ME6UH-D43G7Q": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.402392,
+      "opentm": 1760845330.133559,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -348,13 +572,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1889175",
+        "price": "0.1871857",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 438.72330049 XDGUSD @ limit 0.1889175",
+        "order": "buy 271.30657799 XDGUSD @ limit 0.1871857",
         "close": ""
       },
-      "vol": "438.72330049",
+      "vol": "271.30657799",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -364,11 +588,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "O7VQVR-CBSML-K3DDJ7": {
+    "OO7PWF-2OP2W-DBJQZH": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.292095,
+      "opentm": 1760845330.022402,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -376,13 +600,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1886773",
+        "price": "0.1849386",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 549.39342809 XDGUSD @ limit 0.1886773",
+        "order": "buy 343.43568750 XDGUSD @ limit 0.1849386",
         "close": ""
       },
-      "vol": "549.39342809",
+      "vol": "343.43568750",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -392,11 +616,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "ODLR75-Q3ANN-RJG7DO": {
+    "ORKNQ6-FNPUL-IYAWSD": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.187068,
+      "opentm": 1760845329.912057,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -404,13 +628,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1883341",
+        "price": "0.1817293",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 671.68561142 XDGUSD @ limit 0.1883341",
+        "order": "buy 426.52079453 XDGUSD @ limit 0.1817293",
         "close": ""
       },
-      "vol": "671.68561142",
+      "vol": "426.52079453",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -420,11 +644,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OIN5C6-2DTDT-LSBO75": {
+    "OIPKSE-5MQUG-S7RRMB": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823754.078101,
+      "opentm": 1760845329.785049,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -432,13 +656,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1878863",
+        "price": "0.1775406",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 803.76614580 XDGUSD @ limit 0.1878863",
+        "order": "buy 521.19121100 XDGUSD @ limit 0.1775406",
         "close": ""
       },
-      "vol": "803.76614580",
+      "vol": "521.19121100",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -448,11 +672,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "O5BD62-IYQZ4-EGEKWT": {
+    "OADSQF-SKQAY-XH6UVV": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823753.964371,
+      "opentm": 1760845329.675198,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -460,13 +684,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1873323",
+        "price": "0.1723594",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 944.59098106 XDGUSD @ limit 0.1873323",
+        "order": "buy 629.05935710 XDGUSD @ limit 0.1723594",
         "close": ""
       },
-      "vol": "944.59098106",
+      "vol": "629.05935710",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -476,11 +700,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "ONPPCN-EYWPV-XZDLKK": {
+    "OCUPYK-23WQU-JV5BUO": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823753.854847,
+      "opentm": 1760845329.5568,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -488,13 +712,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1866710",
+        "price": "0.1661746",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 1093.54033168 XDGUSD @ limit 0.1866710",
+        "order": "buy 752.69199969 XDGUSD @ limit 0.1661746",
         "close": ""
       },
-      "vol": "1093.54033168",
+      "vol": "752.69199969",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -504,11 +728,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "OICCBQ-55K62-6XQOHW": {
+    "OG2SND-GSTC4-I7KJC5": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823753.747645,
+      "opentm": 1760845329.45374,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -516,13 +740,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1859015",
+        "price": "0.1589768",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 1250.25788808 XDGUSD @ limit 0.1859015",
+        "order": "buy 895.81590270 XDGUSD @ limit 0.1589768",
         "close": ""
       },
-      "vol": "1250.25788808",
+      "vol": "895.81590270",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",
@@ -532,11 +756,11 @@
       "misc": "",
       "oflags": "fciq"
     },
-    "O5IABD-DB7XV-CLSWGY": {
+    "OQWEFX-SOY5Y-VCWJK2": {
       "refid": null,
       "userref": 0,
       "status": "open",
-      "opentm": 1760823753.637302,
+      "opentm": 1760845329.346591,
       "starttm": 0,
       "expiretm": 0,
       "descr": {
@@ -544,13 +768,13 @@
         "aclass": "forex",
         "type": "buy",
         "ordertype": "limit",
-        "price": "0.1850227",
+        "price": "0.1507579",
         "price2": "0",
         "leverage": "none",
-        "order": "buy 1414.56853986 XDGUSD @ limit 0.1850227",
+        "order": "buy 1063.74858121 XDGUSD @ limit 0.1507579",
         "close": ""
       },
-      "vol": "1414.56853986",
+      "vol": "1063.74858121",
       "vol_exec": "0.00000000",
       "cost": "0.000000000",
       "fee": "0.000000000",

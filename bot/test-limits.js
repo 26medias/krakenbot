@@ -4,9 +4,9 @@ const LimitOrders = require('./LimitOrders');
 
 const uiSettings = {
     pair: 'XDGUSD',
-    currentPrice: 0.1885,
-    positiveRangePercent: 20,
-    negativeRangePercent: 20,
+    currentPrice: 0.189405,
+    positiveRangePercent: 15,
+    negativeRangePercent: 15,
     ordersPerSide: 10,
     usdBalance: 1000,
     assetBalance: 4920,

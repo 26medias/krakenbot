@@ -24,7 +24,10 @@ class Data {
      * @returns {Promise<Object>} - API response
      */
     async makeRequest(path, params = {}, isPublic = true) {
-        return new Promise((resolve, reject) => {
+        const maxRetries = 3;
+        const backoffMs = 250;
+
+        const executeRequest = () => new Promise((resolve, reject) => {
             let fullPath = path;
             let postData = '';
             let method = 'GET';
@@ -92,6 +95,19 @@ class Data {
             }
             req.end();
         });
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await executeRequest();
+            } catch (error) {
+                const isLastAttempt = attempt === maxRetries;
+                if (isLastAttempt) {
+                    throw error;
+                }
+                const waitTime = backoffMs * attempt;
+                await new Promise((resolve) => setTimeout(resolve, waitTime));
+            }
+        }
     }
 
     /**
