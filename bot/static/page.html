@@ -150,6 +150,9 @@
                                 <input type="number" id="minOrderValue" min="0" step="0.1" value="5" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
                             </div>
                         </div>
+                        <button id="applyChangesBtn" class="w-full mt-6 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-sm font-semibold text-white hover:opacity-90 transition focus:ring-4 focus:ring-indigo-500/40">
+                            <i class="fas fa-check mr-2"></i>Apply Changes
+                        </button>
                         <div class="mt-6 grid grid-cols-2 gap-3">
                             <button id="clearOrdersBtn" class="px-3 py-2 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 text-sm font-medium transition">
                                 <i class="fas fa-ban mr-2"></i> Clear Orders
@@ -348,12 +351,16 @@
         let sellOrdersData = [];
         let currentPriceValue = 0;
         let priceSocket = null;
-        let debounceTimer = null;
+        let previewTimer = null;
+
+        const DEFAULT_RISK = 50;
 
         const state = {
             pair: '',
-            risk: 50,
+            risk: DEFAULT_RISK,
+            pendingRisk: DEFAULT_RISK,
             settings: { ...DEFAULT_SETTINGS },
+            pendingSettings: { ...DEFAULT_SETTINGS },
             running: false,
             distribution: null,
             balances: null
@@ -407,15 +414,15 @@
         }
 
         function updateControlValues() {
-            document.getElementById('riskSlider').value = state.risk;
-            document.getElementById('ordersPerSide').value = state.settings.ordersPerSide ?? DEFAULT_SETTINGS.ordersPerSide;
-            document.getElementById('minOrderValue').value = state.settings.minOrderValue ?? DEFAULT_SETTINGS.minOrderValue;
-            document.getElementById('spacingSlider').value = Math.round((state.settings.spacingSpread ?? 0) * 100);
-            document.getElementById('spacingMarginSlider').value = state.settings.spacingMarginRightPercent ?? DEFAULT_SETTINGS.spacingMarginRightPercent;
-            document.getElementById('valueSlider').value = Math.round((state.settings.valueSpread ?? 0) * 100);
-            document.getElementById('valueMarginSlider').value = state.settings.valueMarginRightPercent ?? DEFAULT_SETTINGS.valueMarginRightPercent;
-            document.getElementById('priceRangePeriod').value = state.settings.priceRangePeriod ?? DEFAULT_SETTINGS.priceRangePeriod;
-            document.getElementById('priceRangeMultiplier').value = state.settings.priceRangeMultiplier ?? DEFAULT_SETTINGS.priceRangeMultiplier;
+            document.getElementById('riskSlider').value = state.pendingRisk;
+            document.getElementById('ordersPerSide').value = state.pendingSettings.ordersPerSide ?? DEFAULT_SETTINGS.ordersPerSide;
+            document.getElementById('minOrderValue').value = state.pendingSettings.minOrderValue ?? DEFAULT_SETTINGS.minOrderValue;
+            document.getElementById('spacingSlider').value = Math.round((state.pendingSettings.spacingSpread ?? 0) * 100);
+            document.getElementById('spacingMarginSlider').value = state.pendingSettings.spacingMarginRightPercent ?? DEFAULT_SETTINGS.spacingMarginRightPercent;
+            document.getElementById('valueSlider').value = Math.round((state.pendingSettings.valueSpread ?? 0) * 100);
+            document.getElementById('valueMarginSlider').value = state.pendingSettings.valueMarginRightPercent ?? DEFAULT_SETTINGS.valueMarginRightPercent;
+            document.getElementById('priceRangePeriod').value = state.pendingSettings.priceRangePeriod ?? DEFAULT_SETTINGS.priceRangePeriod;
+            document.getElementById('priceRangeMultiplier').value = state.pendingSettings.priceRangeMultiplier ?? DEFAULT_SETTINGS.priceRangeMultiplier;
             updateRiskLabel();
             updateSpacingLabel();
             updateSpacingMarginLabel();
@@ -424,7 +431,7 @@
         }
 
         function updateRiskLabel() {
-            document.getElementById('riskValueLabel').textContent = `${state.risk.toFixed(1)}%`;
+            document.getElementById('riskValueLabel').textContent = `${state.pendingRisk.toFixed(1)}%`;
         }
 
         function updateSpacingLabel() {
@@ -470,33 +477,77 @@
             };
         }
 
-        function scheduleSettingsUpdate() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                saveSettings().catch((error) => console.error('Failed to update settings', error));
-            }, 350);
+        function syncPendingFromForm() {
+            state.pendingSettings = {
+                ...state.pendingSettings,
+                ...collectSettingsFromForm()
+            };
         }
 
-        async function saveSettings(extra = {}) {
-            const payload = {
-                pair: state.pair,
-                risk: state.risk,
-                settings: {
-                    ...collectSettingsFromForm(),
-                    ...extra
+        function queuePreviewUpdate() {
+            if (!state.pair) {
+                return;
+            }
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(async () => {
+                try {
+                    const payload = {
+                        pair: state.pair,
+                        risk: state.pendingRisk,
+                        settings: state.pendingSettings
+                    };
+                    const preview = await fetchJson('/api/preview', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    if (preview.pair && preview.pair !== state.pair) {
+                        return;
+                    }
+                    if (preview.price) {
+                        updatePriceDisplay(preview.price);
+                    }
+                    if (preview.distribution) {
+                        renderDistribution(preview.distribution);
+                    }
+                    if (preview.balances) {
+                        renderBalances(preview.balances);
+                    }
+                } catch (error) {
+                    console.error('Failed to preview settings', error);
                 }
-            };
-            const snapshot = await fetchJson('/api/settings', {
-                method: 'PATCH',
-                body: JSON.stringify(payload)
-            });
-            applySnapshot(snapshot);
+            }, 200);
+        }
+
+        async function applyChanges() {
+            syncPendingFromForm();
+            const button = document.getElementById('applyChangesBtn');
+            button.disabled = true;
+            button.classList.add('opacity-70');
+            try {
+                const payload = {
+                    pair: state.pair,
+                    risk: state.pendingRisk,
+                    settings: state.pendingSettings
+                };
+                const snapshot = await fetchJson('/api/settings', {
+                    method: 'PATCH',
+                    body: JSON.stringify(payload)
+                });
+                applySnapshot(snapshot);
+            } catch (error) {
+                console.error('Failed to apply settings', error);
+            } finally {
+                button.disabled = false;
+                button.classList.remove('opacity-70');
+            }
         }
 
         function applySnapshot(snapshot) {
             state.pair = snapshot.pair;
             state.risk = snapshot.risk;
+            state.pendingRisk = snapshot.risk;
             state.settings = { ...snapshot.settings };
+            state.pendingSettings = { ...snapshot.settings };
             state.running = snapshot.running;
             state.distribution = snapshot.distribution;
             state.balances = snapshot.balances;
@@ -760,8 +811,12 @@
         async function handlePairChange(event) {
             const newPair = event.target.value;
             state.pair = newPair;
-            await saveSettings({ });
-            connectPriceStream(newPair);
+            try {
+                await refreshDashboard(newPair);
+                connectPriceStream(newPair);
+            } catch (error) {
+                console.error('Failed to switch pair', error);
+            }
         }
 
         async function toggleBot() {
@@ -773,10 +828,11 @@
                     await fetchJson('/api/bot/stop', { method: 'POST', body: '{}' });
                     state.running = false;
                 } else {
+                    syncPendingFromForm();
                     const payload = {
                         pair: state.pair,
-                        risk: state.risk,
-                        settings: collectSettingsFromForm()
+                        risk: state.pendingRisk,
+                        settings: state.pendingSettings
                     };
                     const snapshot = await fetchJson('/api/bot/start', {
                         method: 'POST',
@@ -835,11 +891,13 @@
             document.getElementById('botToggle').addEventListener('click', toggleBot);
             document.getElementById('clearOrdersBtn').addEventListener('click', clearOrders);
             document.getElementById('resetOrdersBtn').addEventListener('click', resetOrders);
+            document.getElementById('applyChangesBtn').addEventListener('click', applyChanges);
 
             document.getElementById('riskSlider').addEventListener('input', (event) => {
-                state.risk = parseFloat(event.target.value) || state.risk;
+                state.pendingRisk = parseFloat(event.target.value) || state.pendingRisk;
                 updateRiskLabel();
-                scheduleSettingsUpdate();
+                syncPendingFromForm();
+                queuePreviewUpdate();
             });
 
             [
@@ -862,7 +920,8 @@
 
                 element.addEventListener('input', (event) => {
                     if (updateFn) updateFn();
-                    scheduleSettingsUpdate();
+                    syncPendingFromForm();
+                    queuePreviewUpdate();
                 });
             });
 

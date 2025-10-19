@@ -25,6 +25,34 @@ const DEFAULT_SETTINGS = Object.freeze({
     priceRangeMultiplier: 5
 });
 
+const DEFAULT_RISK = 50;
+const SETTINGS_DIR = path.join(__dirname, 'config');
+const SETTINGS_FILE = path.join(SETTINGS_DIR, 'bot-settings.json');
+
+function loadSettingsStore() {
+    try {
+        const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.warn(`Failed to load bot settings from disk: ${error.message}`);
+        }
+    }
+    return {};
+}
+
+async function persistSettingsStore(store) {
+    await fs.promises.mkdir(SETTINGS_DIR, { recursive: true });
+    await fs.promises.writeFile(
+        SETTINGS_FILE,
+        JSON.stringify(store, null, 2),
+        'utf8'
+    );
+}
+
 function clamp(value, min, max) {
     if (!Number.isFinite(value)) {
         return min;
@@ -673,14 +701,26 @@ class TradingBotManager {
     constructor({ pair, risk, settings, logger = console } = {}) {
         this.logger = logger;
         this.pair = typeof pair === 'string' && pair ? pair : 'XDGUSD';
-        this.risk = Number.isFinite(risk) ? clamp(risk, 1, 100) : 50;
-        this.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
-        this.bot = new Bot(this.pair, this.risk, { logger: this.logger });
-        this.bot.updateSettings(this.settings);
         this.running = false;
 
         this.priceCache = new Map();
         this.priceInflight = new Map();
+        this.settingsStore = loadSettingsStore();
+
+        const persisted = this.getPersistedEntry(this.pair);
+        const baseSettings = {
+            ...DEFAULT_SETTINGS,
+            ...(persisted?.settings || {})
+        };
+        this.settings = {
+            ...baseSettings,
+            ...(settings || {})
+        };
+        const persistedRisk = persisted?.risk ?? DEFAULT_RISK;
+        this.risk = Number.isFinite(risk) ? clamp(risk, 1, 100) : persistedRisk;
+
+        this.bot = new Bot(this.pair, this.risk, { logger: this.logger });
+        this.bot.updateSettings(this.settings);
     }
 
     get status() {
@@ -690,6 +730,46 @@ class TradingBotManager {
             running: this.running,
             settings: { ...this.settings }
         };
+    }
+
+    getPersistedEntry(pair) {
+        if (!pair || !this.settingsStore || typeof this.settingsStore !== 'object') {
+            return null;
+        }
+        const entry = this.settingsStore[pair];
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+        const safeSettings = entry.settings && typeof entry.settings === 'object'
+            ? { ...entry.settings }
+            : {};
+        const safeRisk = Number.isFinite(entry.risk) ? clamp(entry.risk, 1, 100) : null;
+        return {
+            settings: safeSettings,
+            risk: safeRisk
+        };
+    }
+
+    resolvePairState(pair) {
+        const persisted = this.getPersistedEntry(pair);
+        return {
+            settings: {
+                ...DEFAULT_SETTINGS,
+                ...(persisted?.settings || {})
+            },
+            risk: persisted?.risk ?? DEFAULT_RISK
+        };
+    }
+
+    async persistCurrentSettings() {
+        if (!this.settingsStore || typeof this.settingsStore !== 'object') {
+            this.settingsStore = {};
+        }
+        this.settingsStore[this.pair] = {
+            risk: this.risk,
+            settings: { ...this.settings }
+        };
+        await persistSettingsStore(this.settingsStore);
     }
 
     async ensureBot(pair = this.pair) {
@@ -711,6 +791,9 @@ class TradingBotManager {
             await this.stop();
         }
         this.pair = pair;
+        const { settings, risk } = this.resolvePairState(pair);
+        this.settings = { ...settings };
+        this.risk = Number.isFinite(risk) ? risk : DEFAULT_RISK;
         this.bot = new Bot(this.pair, this.risk, { logger: this.logger });
         this.bot.updateSettings(this.settings);
     }
@@ -763,17 +846,16 @@ class TradingBotManager {
         if (risk !== undefined) {
             const parsedRisk = clamp(normaliseNumber(risk), 1, 100);
             this.risk = parsedRisk;
-            if (this.bot) {
-                this.bot.risk = parsedRisk;
-            }
         }
-        if (settings) {
+        if (settings !== undefined && settings !== null) {
             const normalised = this.normaliseSettings(settings);
             this.settings = { ...this.settings, ...normalised };
-            if (this.bot) {
-                this.bot.updateSettings(normalised);
-            }
         }
+        if (this.bot) {
+            this.bot.risk = this.risk;
+            this.bot.updateSettings({ ...this.settings });
+        }
+        await this.persistCurrentSettings();
         return this.status;
     }
 
@@ -850,19 +932,27 @@ class TradingBotManager {
 
     async buildSnapshot({ pair, settingsOverrides, riskOverride } = {}) {
         const pairToUse = pair || this.pair;
-        const risk = riskOverride !== undefined ? clamp(normaliseNumber(riskOverride), 1, 100) : this.risk;
         const overrides = settingsOverrides ? this.normaliseSettings(settingsOverrides) : {};
+        const isActivePair = pairToUse === this.pair;
 
-        const bot = pairToUse === this.pair
-            ? await this.ensureBot(pairToUse)
-            : (() => {
-                const previewBot = new Bot(pairToUse, risk, { logger: this.logger });
-                previewBot.updateSettings({ ...this.settings, ...overrides });
-                return previewBot;
-            })();
+        const baseState = isActivePair
+            ? { settings: { ...this.settings }, risk: this.risk }
+            : this.resolvePairState(pairToUse);
 
+        const baseSettings = { ...baseState.settings };
+        const baseRisk = baseState.risk;
+        const risk = riskOverride !== undefined ? clamp(normaliseNumber(riskOverride), 1, 100) : baseRisk;
+        const effectiveSettings = { ...baseSettings, ...overrides };
+
+        let bot;
+        if (isActivePair) {
+            bot = await this.ensureBot(pairToUse);
+            bot.updateSettings({ ...baseSettings });
+        } else {
+            bot = new Bot(pairToUse, risk, { logger: this.logger });
+            bot.updateSettings(baseSettings);
+        }
         bot.risk = risk;
-        bot.updateSettings({ ...this.settings, ...overrides });
 
         const [latestPrice, balance, openOrdersRaw] = await Promise.all([
             this.getLatestPrice(pairToUse, { ttl: 15000 }),
@@ -886,8 +976,8 @@ class TradingBotManager {
         return {
             pair: pairToUse,
             risk,
-            running: pairToUse === this.pair ? this.running : false,
-            settings: { ...this.settings, ...overrides },
+            running: isActivePair ? this.running : false,
+            settings: effectiveSettings,
             price: latestPrice,
             balances: {
                 total: balance,
@@ -1105,13 +1195,13 @@ if (require.main === module) {
     program
         .option('--port <number>', 'Port to listen on', (value) => parseInt(value, 10), 3007)
         .option('--pair <pair>', 'Trading pair to monitor', 'XDGUSD')
-        .option('--risk <number>', 'Risk percentage', (value) => parseFloat(value), 50);
+    .option('--risk <number>', 'Risk percentage', (value) => parseFloat(value), DEFAULT_RISK);
 
     program.parse(process.argv);
     const options = program.opts();
 
     const port = Number.isFinite(options.port) ? options.port : 3007;
-    const risk = Number.isFinite(options.risk) ? clamp(options.risk, 1, 100) : 50;
+  const risk = Number.isFinite(options.risk) ? clamp(options.risk, 1, 100) : DEFAULT_RISK;
     const pair = typeof options.pair === 'string' && options.pair ? options.pair : 'XDGUSD';
 
     const manager = new TradingBotManager({ pair, risk });
