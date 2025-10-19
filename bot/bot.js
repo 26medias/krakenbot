@@ -183,6 +183,7 @@ class Bot {
         this.running = false;
         this.settings = { ...DEFAULT_SETTINGS };
         this.pairInfo = null;
+        this.trackedOrderIds = new Set();
     }
 
     setPair(pair) {
@@ -250,6 +251,7 @@ class Bot {
                 const { buyOrders, sellOrders } = await this.calculateLimitRanges();
                 await this.createLimitOrders(buyOrders, sellOrders);
             }
+            await this.refreshTrackedOrders();
 
             this.running = true;
         } catch (error) {
@@ -270,6 +272,7 @@ class Bot {
         this.subscriptions?.limitFill?.unsubscribe?.();
         this.subscriptions = {};
         await this.monitor.close();
+        this.trackedOrderIds.clear();
     }
 
     async balance() {
@@ -378,6 +381,17 @@ class Bot {
     }
 
     async onRebalance(event) {
+        const orderId = event?.order_id;
+        if (!orderId) {
+            console.log('Received limit fill without order_id, ignoring.');
+            return;
+        }
+
+        if (!this.trackedOrderIds.has(orderId)) {
+            console.log(`Ignoring fill for untracked order ${orderId}`);
+            return;
+        }
+
         if (this.busy) {
             console.log('Rebalance already in progress, skipping this event');
             return;
@@ -428,6 +442,11 @@ class Bot {
             }
         } finally {
             this.busy = false;
+            try {
+                await this.refreshTrackedOrders();
+            } catch (error) {
+                console.error('Failed to refresh tracked order cache:', error.message);
+            }
         }
     }
 
@@ -466,6 +485,11 @@ class Bot {
         }
         console.log('Waiting for orders to settle and balance to update...');
         await this.wait(1000);
+        try {
+            await this.refreshTrackedOrders();
+        } catch (error) {
+            console.error('Failed to refresh tracked orders after reset:', error.message);
+        }
     }
 
     async cancelLimitOrdersByPrice(limitPrice, op = 'gt') {
@@ -537,6 +561,9 @@ class Bot {
         if (!dryRun && summary.cancelled.length > 0) {
             await this._persistOrderSnapshots().catch((error) => {
                 logger.error?.(`Failed to persist order snapshot: ${error.message}`);
+            });
+            await this.refreshTrackedOrders().catch((error) => {
+                logger.error?.(`Failed to refresh tracked orders after cancellations: ${error.message}`);
             });
         }
 
@@ -667,13 +694,29 @@ class Bot {
             }
         }
 
-        if (!dryRun && orders.length > 0) {
-            await this._persistOrderSnapshots().catch((error) => {
-                logger.error?.(`Failed to persist order snapshot: ${error.message}`);
+        if (!dryRun) {
+            if (orders.length > 0) {
+                await this._persistOrderSnapshots().catch((error) => {
+                    logger.error?.(`Failed to persist order snapshot: ${error.message}`);
+                });
+            }
+            await this.refreshTrackedOrders().catch((error) => {
+                logger.error?.(`Failed to refresh tracked orders after order creation: ${error.message}`);
             });
         }
 
         return summary;
+    }
+
+    async refreshTrackedOrders() {
+        try {
+            const orders = await this.getOpenOrders();
+            this.trackedOrderIds = new Set(orders.map((order) => order.id));
+            return this.trackedOrderIds;
+        } catch (error) {
+            console.error('Failed to refresh tracked orders:', error.message);
+            return this.trackedOrderIds;
+        }
     }
 
     async _persistOrderSnapshots() {

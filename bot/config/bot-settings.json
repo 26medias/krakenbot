@@ -1,6 +1,6 @@
 {
   "XDGUSD": {
-    "risk": 90.5,
+    "risk": 50,
     "settings": {
       "ordersPerSide": 10,
       "minOrderValue": 5,
@@ -11,7 +11,7 @@
       "valueMarginLeftPercent": 20,
       "valueMarginRightPercent": 0,
       "priceRangePeriod": 120,
-      "priceRangeMultiplier": 20
+      "priceRangeMultiplier": 15
     }
   },
   "ADAUSD": {
