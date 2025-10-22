@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kraken Bot Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1f2937 100%);
+        }
+
+        .glass-effect {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35);
+        }
+
+        .pill {
+            background: rgba(148, 163, 184, 0.14);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .status-running {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.5);
+            color: #4ade80;
+        }
+
+        .status-stopped {
+            background: rgba(248, 113, 113, 0.16);
+            border-color: rgba(248, 113, 113, 0.5);
+            color: #fca5a5;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-track {
+            background: rgba(148, 163, 184, 0.25);
+            height: 6px;
+            border-radius: 999px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            margin-top: -6px;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+            border: none;
+            transition: transform 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.08);
+        }
+
+        .order-row {
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .order-row:hover {
+            transform: translateX(6px);
+            background: rgba(79, 70, 229, 0.08);
+        }
+
+        .visualization-toggle {
+            transition: all 0.2s ease;
+        }
+
+        .visualization-toggle.active {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="text-slate-100">
+    <div class="min-h-screen">
+        <header class="glass-effect">
+            <div class="max-w-7xl mx-auto px-6 py-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white text-2xl shadow-lg">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-semibold text-white">Kraken Bot Control</h1>
+                        <p class="text-slate-400 text-sm">Monitor and steer your automated limit order strategy</p>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div id="botStatusPill" class="pill status-stopped px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 justify-center">
+                        <span class="w-2.5 h-2.5 rounded-full bg-current animate-pulse"></span>
+                        <span id="botStatusLabel">Bot stopped</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label for="pairSelector" class="text-xs uppercase tracking-widest text-slate-400">Pair</label>
+                        <select id="pairSelector" class="px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <button id="botToggle" class="px-6 py-2 rounded-lg font-medium bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:opacity-90 transition focus:ring-4 focus:ring-indigo-500/40">
+                        Start Bot
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+            <section class="grid lg:grid-cols-3 gap-6">
+                <div class="space-y-6">
+                    <div class="glass-effect rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <i class="fas fa-gauge text-indigo-400"></i>
+                                Bot Controls
+                            </h2>
+                            <span class="text-xs uppercase tracking-widest text-slate-400" id="lastUpdatedLabel"></span>
+                        </div>
+                        <div class="space-y-5">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <label class="text-sm text-slate-300">Risk Allocation</label>
+                                    <span class="text-xs font-medium text-indigo-300" id="riskValueLabel">0%</span>
+                                </div>
+                                <input type="range" id="riskSlider" min="1" max="100" step="0.5" value="50" class="w-full">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-300 mb-2 block">Orders per Side</label>
+                                <input type="number" id="ordersPerSide" min="1" max="50" value="10" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-300 mb-2 block">Minimum Order Value (USD)</label>
+                                <input type="number" id="minOrderValue" min="0" step="0.1" value="5" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
+                            </div>
+                        </div>
+                        <button id="applyChangesBtn" class="w-full mt-6 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-sm font-semibold text-white hover:opacity-90 transition focus:ring-4 focus:ring-indigo-500/40">
+                            <i class="fas fa-check mr-2"></i>Apply Changes
+                        </button>
+                        <div class="mt-6 grid grid-cols-2 gap-3">
+                            <button id="clearOrdersBtn" class="px-3 py-2 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 text-sm font-medium transition">
+                                <i class="fas fa-ban mr-2"></i> Clear Orders
+                            </button>
+                            <button id="resetOrdersBtn" class="px-3 py-2 rounded-lg border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 text-sm font-medium transition">
+                                <i class="fas fa-rotate mr-2"></i> Reset Orders
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="glass-effect rounded-2xl p-6">
+                        <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+                            <i class="fas fa-sliders-h text-indigo-400"></i>
+                            Distribution Controls
+                        </h2>
+                        <div class="space-y-6">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-slate-300">Price Spacing</span>
+                                    <span class="text-xs font-medium text-indigo-300" id="spacingLabel">Even</span>
+                                </div>
+                                <input type="range" id="spacingSlider" min="-100" max="100" value="0" class="w-full">
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-slate-300">Spacing Margin</span>
+                                    <span class="text-xs font-medium text-indigo-300" id="spacingMarginLabel">0%</span>
+                                </div>
+                                <input type="range" id="spacingMarginSlider" min="0" max="20" value="3" class="w-full">
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-slate-300">Order Value Spread</span>
+                                    <span class="text-xs font-medium text-indigo-300" id="valueLabel">Even</span>
+                                </div>
+                                <input type="range" id="valueSlider" min="-100" max="100" value="0" class="w-full">
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm text-slate-300">Value Margin</span>
+                                    <span class="text-xs font-medium text-indigo-300" id="valueMarginLabel">0%</span>
+                                </div>
+                                <input type="range" id="valueMarginSlider" min="0" max="20" value="0" class="w-full">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-sm text-slate-300 mb-2 block">Price Range Period (min)</label>
+                                    <input type="number" id="priceRangePeriod" min="1" max="1440" value="120" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
+                                </div>
+                                <div>
+                                    <label class="text-sm text-slate-300 mb-2 block">Range Multiplier</label>
+                                    <input type="number" id="priceRangeMultiplier" min="0.1" step="0.1" value="5" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400 text-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="glass-effect rounded-2xl p-5">
+                            <p class="text-xs uppercase tracking-widest text-slate-400 mb-2">Live Price</p>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-3xl font-semibold text-white" id="livePrice">$0.0000</span>
+                                <span class="text-xs text-slate-400" id="priceTimestamp"></span>
+                            </div>
+                        </div>
+                        <div class="glass-effect rounded-2xl p-5">
+                            <p class="text-xs uppercase tracking-widest text-slate-400 mb-2">Risk-adjusted Balances</p>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                    <p class="text-slate-400">USD Allowed</p>
+                                    <p class="font-semibold text-emerald-300" id="riskUsdBalance">$0.00</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-400">Asset Allowed</p>
+                                    <p class="font-semibold text-sky-300" id="riskAssetBalance">0.000000</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-effect rounded-2xl p-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <i class="fas fa-chart-bar text-indigo-400"></i>
+                                Order Distribution
+                            </h2>
+                            <div class="flex items-center gap-2">
+                                <button id="scatterBtn" class="visualization-toggle active px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700">Scatter</button>
+                                <button id="barBtn" class="visualization-toggle px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700">Bar</button>
+                                <button id="bubbleBtn" class="visualization-toggle px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700">Bubble</button>
+                            </div>
+                        </div>
+                        <div class="relative h-80">
+                            <canvas id="orderChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div class="glass-effect rounded-2xl p-6">
+                            <h3 class="text-lg font-semibold flex items-center gap-2 text-rose-300 mb-4">
+                                <i class="fas fa-arrow-up"></i>
+                                Sell Orders
+                            </h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="text-slate-400 uppercase text-xs tracking-widest">
+                                        <tr class="border-b border-slate-800">
+                                            <th class="text-left py-2">Price</th>
+                                            <th class="text-left py-2">Quantity</th>
+                                            <th class="text-left py-2">Value</th>
+                                            <th class="text-left py-2">Distance</th>
+                                            <th class="text-left py-2">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sellOrdersTable" class="divide-y divide-slate-800"></tbody>
+                                    <tfoot>
+                                        <tr class="border-t border-slate-800 text-slate-300 text-sm">
+                                            <td class="py-3 font-medium">Total</td>
+                                            <td class="py-3" id="sellTotalQuantity">0.00</td>
+                                            <td class="py-3" id="sellTotalValue">$0.00</td>
+                                            <td class="py-3"></td>
+                                            <td class="py-3"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="glass-effect rounded-2xl p-6">
+                            <h3 class="text-lg font-semibold flex items-center gap-2 text-emerald-300 mb-4">
+                                <i class="fas fa-arrow-down"></i>
+                                Buy Orders
+                            </h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="text-slate-400 uppercase text-xs tracking-widest">
+                                        <tr class="border-b border-slate-800">
+                                            <th class="text-left py-2">Price</th>
+                                            <th class="text-left py-2">Quantity</th>
+                                            <th class="text-left py-2">Value</th>
+                                            <th class="text-left py-2">Distance</th>
+                                            <th class="text-left py-2">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="buyOrdersTable" class="divide-y divide-slate-800"></tbody>
+                                    <tfoot>
+                                        <tr class="border-t border-slate-800 text-slate-300 text-sm">
+                                            <td class="py-3 font-medium">Total</td>
+                                            <td class="py-3" id="buyTotalQuantity">0.00</td>
+                                            <td class="py-3" id="buyTotalValue">$0.00</td>
+                                            <td class="py-3"></td>
+                                            <td class="py-3"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid sm:grid-cols-3 gap-4">
+                        <div class="glass-effect rounded-2xl p-4">
+                            <p class="text-xs uppercase tracking-widest text-slate-400 mb-1">Total Orders</p>
+                            <p class="text-2xl font-semibold text-white" id="totalOrders">0</p>
+                        </div>
+                        <div class="glass-effect rounded-2xl p-4">
+                            <p class="text-xs uppercase tracking-widest text-slate-400 mb-1">Total Order Value</p>
+                            <p class="text-2xl font-semibold text-indigo-300" id="totalValue">$0.00</p>
+                        </div>
+                        <div class="glass-effect rounded-2xl p-4">
+                            <p class="text-xs uppercase tracking-widest text-slate-400 mb-1">USD Balance</p>
+                            <p class="text-2xl font-semibold text-slate-200" id="totalUsdBalance">$0.00</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        const DEFAULT_SETTINGS = {
+            ordersPerSide: 10,
+            minOrderValue: 5,
+            spacingSpread: 0.53,
+            spacingMarginRightPercent: 3,
+            valueSpread: -0.14,
+            valueMarginRightPercent: 0,
+            priceRangePeriod: 120,
+            priceRangeMultiplier: 5
+        };
+
+        let chart = null;
+        let currentVisualization = 'scatter';
+        let buyOrdersData = [];
+        let sellOrdersData = [];
+        let currentPriceValue = 0;
+        let priceSocket = null;
+        let previewTimer = null;
+
+        const DEFAULT_RISK = 50;
+
+        const state = {
+            pair: '',
+            risk: DEFAULT_RISK,
+            pendingRisk: DEFAULT_RISK,
+            settings: { ...DEFAULT_SETTINGS },
+            pendingSettings: { ...DEFAULT_SETTINGS },
+            running: false,
+            distribution: null,
+            balances: null
+        };
+
+        function formatCurrency(value, decimals = 2) {
+            if (!Number.isFinite(value)) return '$0.00';
+            return `$${value.toFixed(decimals)}`;
+        }
+
+        function formatQuantity(value, decimals = 6) {
+            if (!Number.isFinite(value)) return '0';
+            return value.toFixed(decimals);
+        }
+
+        function formatPercent(value, decimals = 2) {
+            if (!Number.isFinite(value)) return '0%';
+            return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+        }
+
+        async function fetchJson(url, options = {}) {
+            const response = await fetch(`${API_BASE}${url}`, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                ...options
+            });
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(message || `Failed request: ${response.status}`);
+            }
+            return response.json();
+        }
+
+        function updateBotStatus() {
+            const pill = document.getElementById('botStatusPill');
+            const label = document.getElementById('botStatusLabel');
+            const button = document.getElementById('botToggle');
+
+            if (state.running) {
+                pill.classList.remove('status-stopped');
+                pill.classList.add('status-running');
+                label.textContent = 'Bot running';
+                button.textContent = 'Stop Bot';
+            } else {
+                pill.classList.remove('status-running');
+                pill.classList.add('status-stopped');
+                label.textContent = 'Bot stopped';
+                button.textContent = 'Start Bot';
+            }
+        }
+
+        function updateControlValues() {
+            document.getElementById('riskSlider').value = state.pendingRisk;
+            document.getElementById('ordersPerSide').value = state.pendingSettings.ordersPerSide ?? DEFAULT_SETTINGS.ordersPerSide;
+            document.getElementById('minOrderValue').value = state.pendingSettings.minOrderValue ?? DEFAULT_SETTINGS.minOrderValue;
+            document.getElementById('spacingSlider').value = Math.round((state.pendingSettings.spacingSpread ?? 0) * 100);
+            document.getElementById('spacingMarginSlider').value = state.pendingSettings.spacingMarginRightPercent ?? DEFAULT_SETTINGS.spacingMarginRightPercent;
+            document.getElementById('valueSlider').value = Math.round((state.pendingSettings.valueSpread ?? 0) * 100);
+            document.getElementById('valueMarginSlider').value = state.pendingSettings.valueMarginRightPercent ?? DEFAULT_SETTINGS.valueMarginRightPercent;
+            document.getElementById('priceRangePeriod').value = state.pendingSettings.priceRangePeriod ?? DEFAULT_SETTINGS.priceRangePeriod;
+            document.getElementById('priceRangeMultiplier').value = state.pendingSettings.priceRangeMultiplier ?? DEFAULT_SETTINGS.priceRangeMultiplier;
+            updateRiskLabel();
+            updateSpacingLabel();
+            updateSpacingMarginLabel();
+            updateValueLabel();
+            updateValueMarginLabel();
+        }
+
+        function updateRiskLabel() {
+            document.getElementById('riskValueLabel').textContent = `${state.pendingRisk.toFixed(1)}%`;
+        }
+
+        function updateSpacingLabel() {
+            const value = parseFloat(document.getElementById('spacingSlider').value) || 0;
+            const label = document.getElementById('spacingLabel');
+            if (value <= -60) label.textContent = 'Heavy Left';
+            else if (value < -20) label.textContent = 'Left Bias';
+            else if (value <= 20) label.textContent = 'Even';
+            else if (value < 60) label.textContent = 'Right Bias';
+            else label.textContent = 'Heavy Right';
+        }
+
+        function updateValueLabel() {
+            const value = parseFloat(document.getElementById('valueSlider').value) || 0;
+            const label = document.getElementById('valueLabel');
+            if (value <= -60) label.textContent = 'Heavy Left';
+            else if (value < -20) label.textContent = 'Left Bias';
+            else if (value <= 20) label.textContent = 'Even';
+            else if (value < 60) label.textContent = 'Right Bias';
+            else label.textContent = 'Heavy Right';
+        }
+
+        function updateSpacingMarginLabel() {
+            const value = parseFloat(document.getElementById('spacingMarginSlider').value) || 0;
+            document.getElementById('spacingMarginLabel').textContent = `${value.toFixed(0)}%`;
+        }
+
+        function updateValueMarginLabel() {
+            const value = parseFloat(document.getElementById('valueMarginSlider').value) || 0;
+            document.getElementById('valueMarginLabel').textContent = `${value.toFixed(0)}%`;
+        }
+
+        function collectSettingsFromForm() {
+            return {
+                ordersPerSide: parseInt(document.getElementById('ordersPerSide').value, 10),
+                minOrderValue: parseFloat(document.getElementById('minOrderValue').value),
+                spacingSpread: (parseFloat(document.getElementById('spacingSlider').value) || 0) / 100,
+                spacingMarginRightPercent: parseFloat(document.getElementById('spacingMarginSlider').value) || 0,
+                valueSpread: (parseFloat(document.getElementById('valueSlider').value) || 0) / 100,
+                valueMarginRightPercent: parseFloat(document.getElementById('valueMarginSlider').value) || 0,
+                priceRangePeriod: parseFloat(document.getElementById('priceRangePeriod').value) || DEFAULT_SETTINGS.priceRangePeriod,
+                priceRangeMultiplier: parseFloat(document.getElementById('priceRangeMultiplier').value) || DEFAULT_SETTINGS.priceRangeMultiplier
+            };
+        }
+
+        function syncPendingFromForm() {
+            state.pendingSettings = {
+                ...state.pendingSettings,
+                ...collectSettingsFromForm()
+            };
+        }
+
+        function queuePreviewUpdate() {
+            if (!state.pair) {
+                return;
+            }
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(async () => {
+                try {
+                    const payload = {
+                        pair: state.pair,
+                        risk: state.pendingRisk,
+                        settings: state.pendingSettings
+                    };
+                    const preview = await fetchJson('/api/preview', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    if (preview.pair && preview.pair !== state.pair) {
+                        return;
+                    }
+                    if (preview.price) {
+                        updatePriceDisplay(preview.price);
+                    }
+                    if (preview.distribution) {
+                        renderDistribution(preview.distribution);
+                    }
+                    if (preview.balances) {
+                        renderBalances(preview.balances);
+                    }
+                } catch (error) {
+                    console.error('Failed to preview settings', error);
+                }
+            }, 200);
+        }
+
+        async function applyChanges() {
+            syncPendingFromForm();
+            const button = document.getElementById('applyChangesBtn');
+            button.disabled = true;
+            button.classList.add('opacity-70');
+            try {
+                const payload = {
+                    pair: state.pair,
+                    risk: state.pendingRisk,
+                    settings: state.pendingSettings
+                };
+                const snapshot = await fetchJson('/api/settings', {
+                    method: 'PATCH',
+                    body: JSON.stringify(payload)
+                });
+                applySnapshot(snapshot);
+            } catch (error) {
+                console.error('Failed to apply settings', error);
+            } finally {
+                button.disabled = false;
+                button.classList.remove('opacity-70');
+            }
+        }
+
+        function applySnapshot(snapshot) {
+            state.pair = snapshot.pair;
+            state.risk = snapshot.risk;
+            state.pendingRisk = snapshot.risk;
+            state.settings = { ...snapshot.settings };
+            state.pendingSettings = { ...snapshot.settings };
+            state.running = snapshot.running;
+            state.distribution = snapshot.distribution;
+            state.balances = snapshot.balances;
+            updateBotStatus();
+            updateControlValues();
+            if (snapshot.price) {
+                updatePriceDisplay(snapshot.price);
+            }
+            if (snapshot.openOrders) {
+                renderOrders(snapshot.openOrders);
+            }
+            if (snapshot.distribution) {
+                renderDistribution(snapshot.distribution);
+            }
+            if (snapshot.balances) {
+                renderBalances(snapshot.balances);
+            }
+            document.getElementById('pairSelector').value = state.pair;
+        }
+
+        function renderBalances(balances) {
+            if (!balances) return;
+            const total = balances.total || { quote: 0, base: 0 };
+            const riskAdjusted = balances.riskAdjusted || { quote: 0, base: 0 };
+            document.getElementById('totalUsdBalance').textContent = formatCurrency(total.quote);
+            document.getElementById('riskUsdBalance').textContent = formatCurrency(riskAdjusted.quote);
+            document.getElementById('riskAssetBalance').textContent = formatQuantity(riskAdjusted.base);
+        }
+
+        function renderOrders(openOrders) {
+            const sellTable = document.getElementById('sellOrdersTable');
+            const buyTable = document.getElementById('buyOrdersTable');
+            sellTable.innerHTML = '';
+            buyTable.innerHTML = '';
+
+            openOrders.sell.forEach((order) => {
+                const row = document.createElement('tr');
+                row.className = 'order-row text-slate-200';
+                row.innerHTML = `
+                    <td class="py-2 pr-3">${formatCurrency(order.price, 4)}</td>
+                    <td class="py-2 pr-3">${formatQuantity(order.quantity)}</td>
+                    <td class="py-2 pr-3">${formatCurrency(order.value)}</td>
+                    <td class="py-2 pr-3 ${order.distancePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}">${formatPercent(order.distancePercent)}</td>
+                    <td class="py-2">${order.status || ''}</td>
+                `;
+                sellTable.appendChild(row);
+            });
+
+            openOrders.buy.forEach((order) => {
+                const row = document.createElement('tr');
+                row.className = 'order-row text-slate-200';
+                row.innerHTML = `
+                    <td class="py-2 pr-3">${formatCurrency(order.price, 4)}</td>
+                    <td class="py-2 pr-3">${formatQuantity(order.quantity)}</td>
+                    <td class="py-2 pr-3">${formatCurrency(order.value)}</td>
+                    <td class="py-2 pr-3 ${order.distancePercent >= 0 ? 'text-emerald-300' : 'text-rose-300'}">${formatPercent(order.distancePercent)}</td>
+                    <td class="py-2">${order.status || ''}</td>
+                `;
+                buyTable.appendChild(row);
+            });
+
+            document.getElementById('sellTotalQuantity').textContent = formatQuantity(openOrders.totals.sell.quantity);
+            document.getElementById('sellTotalValue').textContent = formatCurrency(openOrders.totals.sell.value);
+            document.getElementById('buyTotalQuantity').textContent = formatQuantity(openOrders.totals.buy.quantity);
+            document.getElementById('buyTotalValue').textContent = formatCurrency(openOrders.totals.buy.value);
+            document.getElementById('totalOrders').textContent = openOrders.summary.total;
+            document.getElementById('totalValue').textContent = formatCurrency(openOrders.totals.combinedValue);
+        }
+
+        function renderDistribution(distribution) {
+            buyOrdersData = Array.isArray(distribution.buyOrders) ? distribution.buyOrders : [];
+            sellOrdersData = Array.isArray(distribution.sellOrders) ? distribution.sellOrders : [];
+            currentPriceValue = distribution.meta?.currentPrice || currentPriceValue;
+
+            renderChart(buyOrdersData, sellOrdersData, currentPriceValue);
+        }
+
+        function renderChart(buyOrders, sellOrders, currentPrice) {
+            const ctx = document.getElementById('orderChart').getContext('2d');
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            const buyData = buyOrders.map((order) => ({
+                x: order.price,
+                y: order.value,
+                r: Math.sqrt(Math.max(order.value, 0)) * 0.8
+            }));
+
+            const sellData = sellOrders.map((order) => ({
+                x: order.price,
+                y: order.value,
+                r: Math.sqrt(Math.max(order.value, 0)) * 0.8
+            }));
+
+            const datasets = [];
+
+            if (currentVisualization === 'scatter' || currentVisualization === 'bubble') {
+                datasets.push({
+                    label: 'Buy Orders',
+                    data: buyData,
+                    backgroundColor: 'rgba(34,197,94,0.3)',
+                    borderColor: 'rgba(34,197,94,0.8)',
+                    borderWidth: 1,
+                    pointRadius: currentVisualization === 'bubble' ? (context => context.raw.r) : 4,
+                    showLine: false,
+                    parsing: false
+                });
+                datasets.push({
+                    label: 'Sell Orders',
+                    data: sellData,
+                    backgroundColor: 'rgba(251,113,133,0.3)',
+                    borderColor: 'rgba(251,113,133,0.8)',
+                    borderWidth: 1,
+                    pointRadius: currentVisualization === 'bubble' ? (context => context.raw.r) : 4,
+                    showLine: false,
+                    parsing: false
+                });
+            } else {
+                datasets.push({
+                    label: 'Buy Value',
+                    data: buyOrders.map((order) => ({ x: order.price, y: order.value })),
+                    backgroundColor: 'rgba(34,197,94,0.6)',
+                    parsing: false
+                });
+                datasets.push({
+                    label: 'Sell Value',
+                    data: sellOrders.map((order) => ({ x: order.price, y: order.value })),
+                    backgroundColor: 'rgba(251,113,133,0.6)',
+                    parsing: false
+                });
+            }
+
+            datasets.push({
+                label: 'Current Price',
+                data: [
+                    { x: currentPrice, y: 0 },
+                    { x: currentPrice, y: Math.max(...buyOrders.map(o => o.value), ...sellOrders.map(o => o.value), 1) * 1.1 }
+                ],
+                type: 'line',
+                borderColor: 'rgba(148, 163, 184, 0.6)',
+                borderDash: [6, 6],
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+                parsing: false
+            });
+
+            chart = new Chart(ctx, {
+                type: currentVisualization === 'bar' ? 'bar' : 'scatter',
+                data: {
+                    datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.08)'
+                            },
+                            ticks: {
+                                color: 'rgba(226,232,240,0.6)',
+                                callback: (value) => `$${Number(value).toFixed(4)}`
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.08)'
+                            },
+                            ticks: {
+                                color: 'rgba(226,232,240,0.6)',
+                                callback: (value) => `$${Number(value).toFixed(2)}`
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'rgba(226,232,240,0.6)'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    if (context.dataset.label === 'Current Price') {
+                                        return `Current price: $${context.parsed.x.toFixed(4)}`;
+                                    }
+                                    return `Price: $${context.parsed.x.toFixed(4)} | Value: $${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function switchVisualization(type) {
+            currentVisualization = type;
+            document.querySelectorAll('.visualization-toggle').forEach((btn) => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`${type}Btn`).classList.add('active');
+            renderChart(buyOrdersData, sellOrdersData, currentPriceValue);
+        }
+
+        function updatePriceDisplay(price) {
+            if (!price) return;
+            currentPriceValue = price.c;
+            document.getElementById('livePrice').textContent = `$${price.c.toFixed(4)}`;
+            document.getElementById('priceTimestamp').textContent = new Date(price.retrievedAt || Date.now()).toLocaleTimeString();
+            document.getElementById('lastUpdatedLabel').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+            renderChart(buyOrdersData, sellOrdersData, currentPriceValue);
+        }
+
+        async function loadPairs() {
+            try {
+                const pairs = await fetchJson('/api/pairs');
+                const selector = document.getElementById('pairSelector');
+                selector.innerHTML = '';
+                pairs.forEach((pair) => {
+                    const option = document.createElement('option');
+                    option.value = pair.altname;
+                    option.textContent = `${pair.wsname || pair.altname}`;
+                    selector.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load pairs', error);
+            }
+        }
+
+        async function refreshDashboard(pair) {
+            const snapshot = await fetchJson(`/api/dashboard?pair=${encodeURIComponent(pair)}`);
+            applySnapshot(snapshot);
+        }
+
+        function connectPriceStream(pair) {
+            if (priceSocket) {
+                priceSocket.close();
+            }
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            priceSocket = new WebSocket(`${protocol}://${window.location.host}/ws/price?pair=${encodeURIComponent(pair)}`);
+            priceSocket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.type === 'price') {
+                        updatePriceDisplay(payload.price);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse websocket payload', error);
+                }
+            };
+            priceSocket.onclose = () => {
+                priceSocket = null;
+            };
+        }
+
+        async function handlePairChange(event) {
+            const newPair = event.target.value;
+            state.pair = newPair;
+            try {
+                await refreshDashboard(newPair);
+                connectPriceStream(newPair);
+            } catch (error) {
+                console.error('Failed to switch pair', error);
+            }
+        }
+
+        async function toggleBot() {
+            const button = document.getElementById('botToggle');
+            button.disabled = true;
+            button.classList.add('opacity-70');
+            try {
+                if (state.running) {
+                    await fetchJson('/api/bot/stop', { method: 'POST', body: '{}' });
+                    state.running = false;
+                } else {
+                    syncPendingFromForm();
+                    const payload = {
+                        pair: state.pair,
+                        risk: state.pendingRisk,
+                        settings: state.pendingSettings
+                    };
+                    const snapshot = await fetchJson('/api/bot/start', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    applySnapshot(snapshot);
+                }
+                updateBotStatus();
+                await refreshDashboard(state.pair);
+            } catch (error) {
+                console.error('Failed to toggle bot', error);
+            } finally {
+                button.disabled = false;
+                button.classList.remove('opacity-70');
+            }
+        }
+
+        async function clearOrders() {
+            const btn = document.getElementById('clearOrdersBtn');
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+            try {
+                await fetchJson('/api/orders/cancel', {
+                    method: 'POST',
+                    body: JSON.stringify({ pair: state.pair })
+                });
+                await refreshDashboard(state.pair);
+            } catch (error) {
+                console.error('Failed to clear orders', error);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
+            }
+        }
+
+        async function resetOrders() {
+            const btn = document.getElementById('resetOrdersBtn');
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+            try {
+                await fetchJson('/api/orders/reset', {
+                    method: 'POST',
+                    body: JSON.stringify({ pair: state.pair })
+                });
+                await refreshDashboard(state.pair);
+            } catch (error) {
+                console.error('Failed to reset orders', error);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
+            }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('pairSelector').addEventListener('change', handlePairChange);
+            document.getElementById('botToggle').addEventListener('click', toggleBot);
+            document.getElementById('clearOrdersBtn').addEventListener('click', clearOrders);
+            document.getElementById('resetOrdersBtn').addEventListener('click', resetOrders);
+            document.getElementById('applyChangesBtn').addEventListener('click', applyChanges);
+
+            document.getElementById('riskSlider').addEventListener('input', (event) => {
+                state.pendingRisk = parseFloat(event.target.value) || state.pendingRisk;
+                updateRiskLabel();
+                syncPendingFromForm();
+                queuePreviewUpdate();
+            });
+
+            [
+                'ordersPerSide',
+                'minOrderValue',
+                'spacingSlider',
+                'spacingMarginSlider',
+                'valueSlider',
+                'valueMarginSlider',
+                'priceRangePeriod',
+                'priceRangeMultiplier'
+            ].forEach((id) => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                const updateFn = id.includes('spacing') ? updateSpacingLabel
+                    : id.includes('valueMargin') ? updateValueMarginLabel
+                    : id.includes('value') ? updateValueLabel
+                    : id.includes('spacingMargin') ? updateSpacingMarginLabel
+                    : null;
+
+                element.addEventListener('input', (event) => {
+                    if (updateFn) updateFn();
+                    syncPendingFromForm();
+                    queuePreviewUpdate();
+                });
+            });
+
+            document.getElementById('scatterBtn').addEventListener('click', () => switchVisualization('scatter'));
+            document.getElementById('barBtn').addEventListener('click', () => switchVisualization('bar'));
+            document.getElementById('bubbleBtn').addEventListener('click', () => switchVisualization('bubble'));
+
+            window.addEventListener('beforeunload', () => {
+                if (priceSocket) {
+                    priceSocket.close();
+                }
+            });
+        }
+
+        async function initialise() {
+            await loadPairs();
+            const status = await fetchJson('/api/status');
+            applySnapshot(status);
+            if (!status.pair) {
+                state.pair = document.getElementById('pairSelector').value;
+            }
+            await refreshDashboard(state.pair);
+            connectPriceStream(state.pair);
+            updateBotStatus();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            initialise().catch((error) => {
+                console.error('Failed to initialise dashboard', error);
+            });
+        });
+    </script>
+</body>
+</html>
